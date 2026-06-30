@@ -22,7 +22,9 @@ export const state = {
   currentChildId: null, // 当前选中的孩子
   currentPlanId: null,  // 当前学习周期
   plans: [],            // 周期列表
+  planTypes: [],        // 周期类型列表
   tags: [],             // 家庭标签库
+  dayOffs: [],          // 当前周期+孩子的假期日期
   pendingTab: 'today'
 };
 

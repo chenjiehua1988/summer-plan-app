@@ -43,6 +43,7 @@ async function maybeEnterApp() {
   try {
     state.plans = await db.fetchPlans();
     state.tags = await db.fetchTags();
+    state.planTypes = await db.fetchPlanTypes();
   } catch (e) { console.warn('load plans/tags', e); }
   // 恢复或选第一个 active 周期
   if (state.currentPlanId && !state.plans.find(p => p.id === state.currentPlanId)) {
@@ -198,14 +199,18 @@ function renderSetup(view) {
       <div class="row-hint">爸妈共用一个家庭密码，这里切换当前操作人。</div>
     </div>
 
+    <div class="section-title">周期类型管理</div>
+    <div class="card" id="planTypesCard"></div>
+    <div class="child-add">
+      <input id="ptName" type="text" placeholder="新类型名（如 期中备考）" class="grow" />
+      <button class="btn-primary btn-sm" id="ptAdd">添加类型</button>
+    </div>
+
     <div class="section-title">学习周期</div>
     <div class="card" id="plansCard"></div>
     <div class="child-add">
       <input id="pName" type="text" placeholder="周期名（如 2026暑假）" class="grow" />
-      <select id="pType">
-        <option>暑假</option><option>寒假</option><option>KET备考</option>
-        <option>日常</option><option>其他</option>
-      </select>
+      <select id="pType"></select>
       <input id="pStart" type="date" style="width:118px" />
       <input id="pEnd" type="date" style="width:118px" />
       <button class="btn-primary btn-sm" id="pAdd">新建</button>
@@ -253,6 +258,8 @@ function renderSetup(view) {
   if (rs2) { rs2.value = state.currentRole; rs2.onchange = () => { auth.switchRole(rs2.value); toast('已切换为 ' + rs2.value); }; }
 
   renderPlansCard();
+  renderPlanTypesCard();
+  fillPlanTypeSelect();
   renderTagsCard();
   renderShopCard();
   renderChildrenCard();
@@ -264,6 +271,14 @@ function renderSetup(view) {
     document.getElementById('tmplArea').innerHTML =
       `<div class="empty">${!state.currentPlanId ? '请先在上方选择/创建一个学习周期。' : '请先添加孩子。'}</div>`;
   }
+
+  // 新建周期类型
+  view.querySelector('#ptAdd').onclick = async () => {
+    const name = view.querySelector('#ptName').value.trim();
+    if (!name) { toast('请填类型名'); return; }
+    try { state.planTypes.push(await db.addPlanType(name)); toast('已添加'); renderPlanTypesCard(); fillPlanTypeSelect(); }
+    catch (e) { toast('添加失败：' + e.message); }
+  };
 
   // 新建周期
   view.querySelector('#pAdd').onclick = async () => {
@@ -329,6 +344,29 @@ function renderSetup(view) {
     fillChildSwitcher(); fillPlanSwitcher();
     showAuth();
   };
+}
+
+function renderPlanTypesCard() {
+  const card = document.getElementById('planTypesCard');
+  if (!card) return;
+  card.innerHTML = state.planTypes.length
+    ? state.planTypes.map(t => `
+      <div class="mgmt-row">
+        <span class="grow">${t.name}</span>
+        <button class="btn-ghost btn-sm" data-del-pt="${t.id}">删除</button>
+      </div>`).join('')
+    : `<div class="empty">还没有类型。</div>`;
+  card.querySelectorAll('[data-del-pt]').forEach(b => {
+    b.onclick = async () => {
+      try { await db.deletePlanType(b.dataset.delPt); state.planTypes = state.planTypes.filter(x => x.id !== b.dataset.delPt); renderPlanTypesCard(); fillPlanTypeSelect(); toast('已删除'); }
+      catch (e) { toast('删除失败：' + e.message); }
+    };
+  });
+}
+function fillPlanTypeSelect() {
+  const sel = document.getElementById('pType');
+  if (!sel) return;
+  sel.innerHTML = state.planTypes.map(t => `<option>${t.name}</option>`).join('');
 }
 
 function renderPlansCard() {

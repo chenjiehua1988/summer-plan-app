@@ -16,13 +16,20 @@ export async function renderStats(view) {
   try { records = await db.fetchRecordsByPlan(state.currentPlanId, childId); }
   catch (e) { records = []; }
 
-  const total = records.length;
-  const verified = records.filter(r => r.status === 'verified').length;
-  const done = records.filter(r => r.status === 'done' || r.status === 'verified').length;
+  // 排除 skipped（假期免打卡）后统计
+  const eff = records.filter(r => r.status !== 'skipped');
+  const total = eff.length;
+  const verified = eff.filter(r => r.status === 'verified').length;
+  const done = eff.filter(r => r.status === 'done' || r.status === 'verified').length;
   const rate = total ? Math.round((verified / total) * 100) : 0;
-  const points = records.filter(r => r.status === 'verified').reduce((s, r) => s + (r.points || 0), 0);
-  const okDates = new Set(records.filter(r => r.status === 'done' || r.status === 'verified').map(r => r.date));
+  const points = eff.filter(r => r.status === 'verified').reduce((s, r) => s + (r.points || 0), 0);
+  const skippedCount = records.length - eff.length;
+  const okDates = new Set(eff.filter(r => r.status === 'done' || r.status === 'verified').map(r => r.date));
   const streak = calcStreak(okDates);
+
+  // 假期天数
+  let dayOffCount = 0;
+  try { dayOffCount = (await db.fetchDayOffs(state.currentPlanId, childId)).length; } catch (e) {}
 
   // 倒计时/天数
   const today = todayStr();
@@ -34,9 +41,9 @@ export async function renderStats(view) {
     progressPct = Math.round(passedDays / totalDays * 100);
   }
 
-  // 按标签完成率
+  // 按标签完成率（排除 skipped）
   const byTag = {};
-  records.forEach(r => {
+  eff.forEach(r => {
     const tags = (r.tags && r.tags.length) ? r.tags : ['(无标签)'];
     tags.forEach(tn => {
       byTag[tn] = byTag[tn] || { count: 0, verified: 0 };
@@ -44,9 +51,9 @@ export async function renderStats(view) {
       if (r.status === 'verified') byTag[tn].verified++;
     });
   });
-  // 按科目完成率
+  // 按科目完成率（排除 skipped）
   const bySubject = {};
-  records.forEach(r => {
+  eff.forEach(r => {
     bySubject[r.subject] = bySubject[r.subject] || { count: 0, verified: 0 };
     bySubject[r.subject].count++;
     if (r.status === 'verified') bySubject[r.subject].verified++;
@@ -57,7 +64,7 @@ export async function renderStats(view) {
   try {
     const others = state.plans.filter(p => p.id !== state.currentPlanId);
     comparisons = await Promise.all(others.map(async p => {
-      const rs = await db.fetchRecordsByPlan(p.id, childId);
+      const rs = (await db.fetchRecordsByPlan(p.id, childId)).filter(r => r.status !== 'skipped');
       const v = rs.filter(r => r.status === 'verified').length;
       const t = rs.length;
       return { name: p.name, rate: t ? Math.round(v / t * 100) : 0, v, t, status: p.status };
@@ -87,8 +94,9 @@ export async function renderStats(view) {
       <div class="stat-card"><div class="stat-num">${rate}%</div><div class="stat-lab">验收完成率</div></div>
       <div class="stat-card"><div class="stat-num">${streak}</div><div class="stat-lab">连续打卡(天)</div></div>
       <div class="stat-card"><div class="stat-num">${points}</div><div class="stat-lab">周期积分</div></div>
-      <div class="stat-card"><div class="stat-num">${verified}/${total}</div><div class="stat-lab">验收/总任务</div></div>
+      <div class="stat-card"><div class="stat-num">${dayOffCount}</div><div class="stat-lab">假期天数</div></div>
     </div>
+    <div class="row-hint" style="margin:-4px 2px 8px">验收 ${verified}/${total} · 免打卡 ${skippedCount}</div>
 
     <div class="section-title">按标签完成率</div>
     ${Object.keys(byTag).length ? `<div class="subj-stats">

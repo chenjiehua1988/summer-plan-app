@@ -200,6 +200,7 @@ export async function deleteTag(id) {
 
 // ---------- 每日记录 ----------
 // 拉取某孩子某天的记录；若当天无记录，从「当前周期+孩子」active 模板自动生成
+// 当天若是假期（day_off），生成的记录 status='skipped'
 export async function ensureDailyRecords(childId, date, planId) {
   const pid = planId || state.currentPlanId;
   let q = supabase.from('daily_records').select('*').eq('child_id', childId).eq('date', date);
@@ -215,12 +216,20 @@ export async function ensureDailyRecords(childId, date, planId) {
   const templates = await fetchTemplates(pid, childId);
   const active = templates.filter(t => t.active);
   if (!active.length) return [];
+  // 是否假期
+  let isDayOff = false;
+  try {
+    const { data: dof } = await supabase.from('day_off').select('id')
+      .eq('plan_id', pid).eq('child_id', childId).eq('date', date).maybeSingle();
+    isDayOff = !!dof;
+  } catch (e) {}
   // 取标签名映射，写入 tags 快照
   const allTags = await fetchTags();
   const tagName = id => (allTags.find(tg => tg.id === id) || {}).name;
   const rows = active.map(t => ({
     family_id: state.family.id, plan_id: pid, child_id: childId, task_id: t.id, date,
-    subject: t.subject, title: t.title, points: t.points, status: 'pending',
+    subject: t.subject, title: t.title, points: t.points,
+    status: isDayOff ? 'skipped' : 'pending',
     tags: (t.tagIds || []).map(tagName).filter(Boolean)
   }));
   const { data, error: ie } = await supabase.from('daily_records').insert(rows).select();
@@ -377,5 +386,107 @@ export function subscribeRecords(childId, onChange) {
     .on('postgres_changes',
       { event: '*', schema: 'public', table: 'point_ledger', filter: 'child_id=eq.' + childId },
       () => onChange && onChange())
+    .on('postgres_changes',
+      { event: '*', schema: 'public', table: 'day_off', filter: 'child_id=eq.' + childId },
+      () => onChange && onChange())
     .subscribe();
+}
+
+// ---------- 周期类型 ----------
+export async function fetchPlanTypes() {
+  const { data, error } = await supabase
+    .from('plan_types').select('*').eq('family_id', state.family.id).order('sort').order('created_at');
+  if (error) throw error;
+  return data || [];
+}
+export async function addPlanType(name) {
+  const { data, error } = await supabase.from('plan_types')
+    .insert({ family_id: state.family.id, name }).select().single();
+  if (error) throw error;
+  return data;
+}
+export async function deletePlanType(id) {
+  const { error } = await supabase.from('plan_types').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// ---------- 假期/请假 ----------
+export async function fetchDayOffs(planId, childId) {
+  const { data, error } = await supabase.from('day_off').select('*')
+    .eq('plan_id', planId).eq('child_id', childId);
+  if (error) throw error;
+  return data || [];
+}
+export async function markDayOff(planId, childId, date, reason) {
+  // upsert（unique plan_id+child_id+date）
+  const { data, error } = await supabase.from('day_off').upsert(
+    { family_id: state.family.id, plan_id: planId, child_id: childId, date, reason: reason || null },
+    { onConflict: 'plan_id,child_id,date' }
+  ).select().single();
+  if (error) throw error;
+  // 当天已生成任务转 skipped
+  await supabase.from('daily_records').update({ status: 'skipped' })
+    .eq('plan_id', planId).eq('child_id', childId).eq('date', date);
+  return data;
+}
+export async function unmarkDayOff(planId, childId, date) {
+  const { error } = await supabase.from('day_off').delete()
+    .eq('plan_id', planId).eq('child_id', childId).eq('date', date);
+  if (error) throw error;
+  // skipped 任务恢复 pending
+  await supabase.from('daily_records').update({ status: 'pending' })
+    .eq('plan_id', planId).eq('child_id', childId).eq('date', date).eq('status', 'skipped');
+}
+
+// ---------- 照片上传（前端压缩 + Storage） ----------
+// 压缩图片：长边 1280，JPEG 0.7
+async function compressImage(file, maxSide = 1280, quality = 0.7) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      let { width, height } = img;
+      if (width > maxSide || height > maxSide) {
+        if (width >= height) { height = Math.round(height * maxSide / width); width = maxSide; }
+        else { width = Math.round(width * maxSide / height); height = maxSide; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width; canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+      URL.revokeObjectURL(url);
+      canvas.toBlob(b => b ? resolve(b) : reject(new Error('压缩失败')), 'image/jpeg', quality);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('图片加载失败')); };
+    img.src = url;
+  });
+}
+
+// 上传一张照片，返回 public URL
+export async function uploadPhoto(recordId, file) {
+  const blob = await compressImage(file);
+  const fam = state.family.id;
+  const ts = Date.now();
+  const path = `${fam}/${recordId}/${ts}_${Math.random().toString(36).slice(2, 6)}.jpg`;
+  const { error } = await supabase.storage.from('verify-photos').upload(path, blob, {
+    contentType: 'image/jpeg', upsert: false
+  });
+  if (error) throw error;
+  const { data: pub } = supabase.storage.from('verify-photos').getPublicUrl(path);
+  return pub.publicUrl;
+}
+
+// 给记录追加照片路径（不覆盖已有）
+export async function appendPhotos(recordId, newUrls) {
+  const { data: rec, error: e1 } = await supabase
+    .from('daily_records').select('photos').eq('id', recordId).single();
+  if (e1) throw e1;
+  const existing = rec.photos || [];
+  const merged = [...existing, ...newUrls];
+  const { data, error } = await supabase
+    .from('daily_records').update({ photos: merged, updated_at: new Date().toISOString() })
+    .eq('id', recordId).select().single();
+  if (error) throw error;
+  await cacheRecords([data]);
+  return data;
 }

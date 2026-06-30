@@ -47,9 +47,39 @@ export async function renderVerify(view) {
       } catch (e) { toast('操作失败：' + e.message); }
     };
   });
+  // 补拍照片
+  view.querySelectorAll('[data-addphoto]').forEach(b => {
+    b.onclick = () => {
+      const id = b.dataset.addphoto;
+      const input = document.createElement('input');
+      input.type = 'file'; input.accept = 'image/*'; input.multiple = true; input.capture = 'environment';
+      input.onchange = async () => {
+        const files = [...input.files];
+        if (!files.length) return;
+        try {
+          toast(`上传 ${files.length} 张…`);
+          const urls = [];
+          for (const f of files) urls.push(await db.uploadPhoto(id, f));
+          await db.appendPhotos(id, urls);
+          toast('已添加照片');
+          renderVerify(view);
+        } catch (e) { toast('上传失败：' + e.message); }
+      };
+      input.click();
+    };
+  });
+  // 查看照片
+  view.querySelectorAll('[data-viewphoto]').forEach(b => {
+    b.onclick = () => {
+      const id = b.dataset.viewphoto;
+      const r = records.find(x => x.id === id);
+      viewPhotos(r?.photos || []);
+    };
+  });
 }
 
 function verifyRow(r) {
+  const photos = r.photos || [];
   return `
     <li class="task-item" data-id="${r.id}">
       <div class="task-body" style="flex:1">
@@ -57,8 +87,11 @@ function verifyRow(r) {
         <div class="task-meta">
           <span class="subj subj-${r.subject}">${r.subject}</span>
           <span class="note">+${r.points} 分</span>
+          ${photos.length ? `<span class="task-photos link" data-viewphoto="${r.id}">📷 ${photos.length}</span>` : ''}
+          ${r.note ? `<span class="note">📝 ${r.note}</span>` : ''}
         </div>
         <input class="vnote" data-for="${r.id}" type="text" placeholder="备注（可选）" />
+        <button class="btn-ghost btn-sm" data-addphoto="${r.id}" style="margin-top:6px">📷 补拍照片</button>
       </div>
       <div class="verify-btns">
         <button class="btn-primary btn-sm" data-act="pass" data-id="${r.id}">通过</button>
@@ -69,6 +102,7 @@ function verifyRow(r) {
 function doneRow(r) {
   const cls = r.status === 'verified' ? 'badge-ok' : 'badge-no';
   const txt = r.status === 'verified' ? '已验收' : '已打回';
+  const photos = r.photos || [];
   return `
     <li class="task-item is-done">
       <div class="task-body" style="flex:1">
@@ -76,8 +110,21 @@ function doneRow(r) {
         <div class="task-meta">
           <span class="subj subj-${r.subject}">${r.subject}</span>
           <span class="badge ${cls}">${txt}</span>
+          ${photos.length ? `<span class="task-photos link" data-viewphoto="${r.id}">📷 ${photos.length}</span>` : ''}
           ${r.note ? `<span class="note">📝 ${r.note}</span>` : ''}
         </div>
       </div>
     </li>`;
+}
+
+// 照片预览
+function viewPhotos(photos) {
+  if (!photos.length) return;
+  const overlay = document.createElement('div');
+  overlay.className = 'photo-overlay';
+  overlay.innerHTML = `
+    <div class="photo-bar"><span>照片 ${photos.length} 张</span><button class="btn-ghost btn-sm">关闭</button></div>
+    <div class="photo-grid">${photos.map(u => `<img src="${u}" />`).join('')}</div>`;
+  overlay.onclick = (e) => { if (e.target === overlay || e.target.tagName === 'BUTTON') overlay.remove(); };
+  document.body.appendChild(overlay);
 }
