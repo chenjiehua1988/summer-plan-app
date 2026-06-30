@@ -25,6 +25,7 @@ async function boot() {
   bindChildSwitcher();
   bindPlanSwitcher();
   bindLogoutTop();
+  bindPointsModal();
   window.addEventListener('online', () => { toast('已联网，同步中…'); db.flushQueue(); refreshCurrent(); });
 
   const fam = await auth.restoreSession();
@@ -98,6 +99,21 @@ function bindLogoutTop() {
     fillChildSwitcher(); fillPlanSwitcher();
     showAuth();
   };
+}
+
+// 顶栏积分按钮 → 打开积分浮层（家长/孩子通用）
+function bindPointsModal() {
+  const btn = document.getElementById('btnPoints');
+  const modal = document.getElementById('pointsModal');
+  const close = document.getElementById('btnClosePoints');
+  if (!btn) return;
+  btn.onclick = async () => {
+    if (!state.currentChildId) { toast('请先选择孩子'); return; }
+    modal.style.display = 'flex';
+    await renderPoints(document.getElementById('pointsModalArea'), state.currentChildId);
+  };
+  if (close) close.onclick = () => { modal.style.display = 'none'; };
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
 }
 
 // ---------- 鉴权 UI（家长/孩子） ----------

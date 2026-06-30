@@ -91,6 +91,14 @@
   <!-- 通用提示条 -->
   <div id="toast" class="toast"></div>
 
+  <!-- 积分浮层（点顶栏⭐打开，家长/孩子通用） -->
+  <div id="pointsModal" class="photo-overlay" style="display:none;background:rgba(0,0,0,.4)">
+    <div class="points-modal-inner">
+      <div class="photo-bar"><span>积分中心</span><button class="btn-ghost btn-sm" id="btnClosePoints">关闭</button></div>
+      <div id="pointsModalArea"></div>
+    </div>
+  </div>
+
   <!-- Supabase 客户端（ESM CDN） -->
   <script type="module" src="https://esm.sh/@supabase/supabase-js@2"></script>
   <!-- 业务脚本（模块化，依赖 supabase.js 导出 supabase） -->
