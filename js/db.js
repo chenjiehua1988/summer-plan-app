@@ -506,6 +506,34 @@ export async function appendPhotos(recordId, newUrls) {
   return data;
 }
 
+// ---------- 录音上传 ----------
+// 上传一段音频 blob，返回 public URL。ext: mp4/webm/ogg 等
+export async function uploadAudio(recordId, blob, ext) {
+  const fam = state.family.id;
+  const ts = Date.now();
+  const path = `audio/${fam}/${recordId}/${ts}_${Math.random().toString(36).slice(2, 6)}.${ext}`;
+  const { error } = await supabase.storage.from('verify-photos').upload(path, blob, {
+    contentType: blob.type || `audio/${ext}`, upsert: false
+  });
+  if (error) throw error;
+  const { data: pub } = supabase.storage.from('verify-photos').getPublicUrl(path);
+  return pub.publicUrl;
+}
+// 给记录追加音频路径
+export async function appendAudios(recordId, newUrls) {
+  const { data: rec, error: e1 } = await supabase
+    .from('daily_records').select('audios').eq('id', recordId).single();
+  if (e1) throw e1;
+  const existing = rec.audios || [];
+  const merged = [...existing, ...newUrls];
+  const { data, error } = await supabase
+    .from('daily_records').update({ audios: merged, updated_at: new Date().toISOString() })
+    .eq('id', recordId).select().single();
+  if (error) throw error;
+  await cacheRecords([data]);
+  return data;
+}
+
 // ---------- 兑换申请 ----------
 
 // 孩子发起申请

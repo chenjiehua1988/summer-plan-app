@@ -1,7 +1,7 @@
 // ============================================================
 // 任务模板管理 + 每日打卡视图（按周期 + 标签）
 // ============================================================
-import { state, todayStr, toast, actorName, segHtml, bindSeg } from './supabase.js';
+import { state, todayStr, toast, actorName, segHtml, bindSeg, hm } from './supabase.js';
 import * as db from './db.js';
 
 // 今日打卡视图：渲染当天 daily_records，按标签分组；支持假期标记与打卡拍照
@@ -70,10 +70,11 @@ export async function renderToday(view) {
       e.stopPropagation();
       openCheckinPanel(id, r, records, el);
     });
-    // 查看已有照片
+    // 查看已有照片/录音
     el.querySelector('.task-photos')?.addEventListener('click', (e) => {
       e.stopPropagation();
-      viewPhotos(r.photos || []);
+      if (e.target.dataset.viewaudio) viewAudios(r.audios || []);
+      else viewPhotos(r.photos || []);
     });
   });
 }
@@ -119,6 +120,9 @@ function taskRow(r) {
   const photos = r.photos || [];
   const photosHtml = photos.length
     ? `<span class="task-photos link">📷 ${photos.length}</span>` : '';
+  const audios = r.audios || [];
+  const audiosHtml = audios.length
+    ? `<span class="task-photos link" data-viewaudio="1">🎙 ${audios.length}</span>` : '';
   const actBtn = (!skipped && !verified)
     ? `<button class="task-act btn-ghost btn-sm">${done ? '改' : '记'}</button>` : '';
   return `
@@ -131,7 +135,10 @@ function taskRow(r) {
           ${tagsHtml}
           ${tag}
           ${photosHtml}
+          ${audiosHtml}
           ${r.note ? `<span class="note">📝 ${r.note}</span>` : ''}
+          ${r.completed_at ? `<span class="note">打卡 ${hm(r.completed_at)}</span>` : ''}
+          ${r.verified_at ? `<span class="note">验收 ${hm(r.verified_at)}</span>` : ''}
         </div>
       </div>
       ${actBtn}
@@ -139,40 +146,158 @@ function taskRow(r) {
     </li>`;
 }
 
-// 打卡面板：输入说明 + 拍照 + 完成
+// 打卡面板：底部抽屉，备注+拍照+录音+完成（都是可选）
 function openCheckinPanel(id, r, records, el) {
-  const note = prompt('说明（可选）', r.note || '');
-  if (note === null) return;
-  // 选图
-  const input = document.createElement('input');
-  input.type = 'file'; input.accept = 'image/*'; input.multiple = true; input.capture = 'environment';
-  input.onchange = async () => {
-    const files = [...input.files];
+  // 状态：待上传的照片文件、录音 blob
+  const st = { photoFiles: [], audioBlobs: [], recorder: null, recMime: 'webm', recording: false, recTimer: null, recSec: 0 };
+
+  const overlay = document.createElement('div');
+  overlay.className = 'checkin-overlay';
+  overlay.innerHTML = `
+    <div class="checkin-sheet">
+      <div class="checkin-head">
+        <span class="checkin-title">${r.title}</span>
+        <button class="btn-ghost btn-sm" id="ckClose">取消</button>
+      </div>
+      <input class="checkin-note" type="text" placeholder="说明（可选）" value="${r.note || ''}" />
+      <div class="checkin-actions">
+        <button class="btn-ghost btn-sm" id="ckPhoto">📷 拍照/选图</button>
+        <button class="btn-ghost btn-sm" id="ckRec">🎙 录音</button>
+        <button class="btn-ghost btn-sm" id="ckAudioFile">🎵 选音频文件</button>
+      </div>
+      <div class="checkin-rec" id="ckRecBox" style="display:none">
+        <span id="ckRecTime">00:00</span>
+        <button class="btn-primary btn-sm" id="ckRecToggle">开始</button>
+        <span class="checkin-hint" id="ckRecHint"></span>
+      </div>
+      <div class="checkin-picked" id="ckPicked"></div>
+      <button class="btn-primary checkin-submit" id="ckSubmit">完成打卡</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  const $ = sel => overlay.querySelector(sel);
+
+  const close = () => { stopRecIf(); overlay.remove(); };
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  $('#ckClose').onclick = close;
+
+  const renderPicked = () => {
+    const ph = st.photoFiles.map((f, i) => `<span class="pick-chip">📷${i+1}<b data-rm-photo="${i}">×</b></span>`).join('');
+    const au = st.audioBlobs.map((a, i) => `<span class="pick-chip">🎙${a.sec}秒<b data-rm-audio="${i}">×</b></span>`).join('');
+    $('#ckPicked').innerHTML = ph + au;
+    overlay.querySelectorAll('[data-rm-photo]').forEach(b => b.onclick = () => { st.photoFiles.splice(+b.dataset.rmPhoto,1); renderPicked(); });
+    overlay.querySelectorAll('[data-rm-audio]').forEach(b => b.onclick = () => { st.audioBlobs.splice(+b.dataset.rmAudio,1); renderPicked(); });
+  };
+
+  // 拍照/选图
+  $('#ckPhoto').onclick = () => {
+    const input = document.createElement('input');
+    input.type = 'file'; input.accept = 'image/*'; input.multiple = true; input.capture = 'environment';
+    input.onchange = () => { st.photoFiles.push(...input.files); renderPicked(); };
+    input.click();
+  };
+  // 选音频文件
+  $('#ckAudioFile').onclick = () => {
+    const input = document.createElement('input');
+    input.type = 'file'; input.accept = 'audio/*';
+    input.onchange = async () => {
+      for (const f of input.files) {
+        const sec = await audioDuration(f);
+        st.audioBlobs.push({ blob: f, ext: (f.name.split('.').pop() || 'mp4').toLowerCase(), sec });
+      }
+      renderPicked();
+    };
+    input.click();
+  };
+
+  // 录音
+  const recBox = $('#ckRecBox');
+  const recToggle = $('#ckRecToggle');
+  const recTime = $('#ckRecTime');
+  const recHint = $('#ckRecHint');
+  $('#ckRec').onclick = async () => {
+    recBox.style.display = '';
+    if (!st.recorder && !st.recording) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        st.recMime = MediaRecorder.isTypeSupported('audio/webm') ? 'webm'
+          : MediaRecorder.isTypeSupported('audio/mp4') ? 'mp4' : '';
+        const mr = new MediaRecorder(stream, st.recMime ? { mimeType: 'audio/' + st.recMime } : undefined);
+        const chunks = [];
+        mr.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+        mr.onstop = () => {
+          const blob = new Blob(chunks, { type: 'audio/' + st.recMime });
+          st.audioBlobs.push({ blob, ext: st.recMime, sec: st.recSec });
+          renderPicked();
+          stream.getTracks().forEach(t => t.stop());
+        };
+        st.recorder = mr;
+        recHint.textContent = '';
+      } catch (e) { recHint.textContent = '无法访问麦克风，请用「选音频文件」'; return; }
+    }
+  };
+  recToggle.onclick = () => {
+    if (!st.recorder) return;
+    if (!st.recording) {
+      st.recorder.start();
+      st.recording = true; st.recSec = 0;
+      recToggle.textContent = '停止';
+      st.recTimer = setInterval(() => { st.recSec++; recTime.textContent = fmtSec(st.recSec); }, 1000);
+    } else {
+      stopRecIf();
+    }
+  };
+  function stopRecIf() {
+    if (st.recording && st.recorder && st.recorder.state !== 'inactive') st.recorder.stop();
+    st.recording = false;
+    if (st.recTimer) { clearInterval(st.recTimer); st.recTimer = null; }
+    if (recToggle) recToggle.textContent = '开始';
+  }
+
+  // 完成
+  $('#ckSubmit').onclick = async () => {
+    const note = overlay.querySelector('.checkin-note').value.trim();
+    stopRecIf();
+    const btn = $('#ckSubmit');
+    btn.disabled = true; btn.textContent = '提交中…';
     try {
-      // 先更新 note + 状态 done
       const patch = { status: 'done', note: note || null,
         completed_at: new Date().toISOString(), completed_by: actorName() };
       await db.updateRecord(id, patch);
       Object.assign(r, patch);
-      // 上传照片
-      if (files.length) {
-        toast(`上传 ${files.length} 张照片…`);
+      if (st.photoFiles.length) {
+        toast(`上传 ${st.photoFiles.length} 张照片…`);
         const urls = [];
-        for (const f of files) { urls.push(await db.uploadPhoto(id, f)); }
-        const updated = await db.appendPhotos(id, urls);
-        r.photos = updated.photos;
-        toast('已保存');
-      } else {
-        toast('已保存');
+        for (const f of st.photoFiles) urls.push(await db.uploadPhoto(id, f));
+        const up = await db.appendPhotos(id, urls);
+        r.photos = up.photos;
       }
+      if (st.audioBlobs.length) {
+        toast(`上传 ${st.audioBlobs.length} 段录音…`);
+        const urls = [];
+        for (const a of st.audioBlobs) urls.push(await db.uploadAudio(id, a.blob, a.ext));
+        const up = await db.appendAudios(id, urls);
+        r.audios = up.audios;
+      }
+      toast('已打卡 ✓');
+      overlay.remove();
       renderToday(document.getElementById('view'));
-    } catch (e) { toast('保存失败：' + e.message); }
+    } catch (e) { toast('保存失败：' + e.message); btn.disabled = false; btn.textContent = '完成打卡'; }
   };
-  // 给用户选择：取消则只存 note
-  input.click();
 }
 
-// 照片预览（简易）
+// 音频时长（秒）
+function audioDuration(file) {
+  return new Promise(res => {
+    const url = URL.createObjectURL(file);
+    const a = new Audio();
+    a.onloadedmetadata = () => { URL.revokeObjectURL(url); res(Math.round(a.duration) || 0); };
+    a.onerror = () => { URL.revokeObjectURL(url); res(0); };
+    a.src = url;
+  });
+}
+function fmtSec(s) { const m = String(Math.floor(s/60)).padStart(2,'0'); const ss = String(s%60).padStart(2,'0'); return m+':'+ss; }
+
+// 照片/录音预览
 function viewPhotos(photos) {
   if (!photos.length) return;
   const overlay = document.createElement('div');
@@ -180,6 +305,16 @@ function viewPhotos(photos) {
   overlay.innerHTML = `
     <div class="photo-bar"><span>照片 ${photos.length} 张</span><button class="btn-ghost btn-sm">关闭</button></div>
     <div class="photo-grid">${photos.map(u => `<img src="${u}" />`).join('')}</div>`;
+  overlay.onclick = (e) => { if (e.target === overlay || e.target.tagName === 'BUTTON') overlay.remove(); };
+  document.body.appendChild(overlay);
+}
+function viewAudios(audios) {
+  if (!audios.length) return;
+  const overlay = document.createElement('div');
+  overlay.className = 'photo-overlay';
+  overlay.innerHTML = `
+    <div class="photo-bar"><span>录音 ${audios.length} 段</span><button class="btn-ghost btn-sm">关闭</button></div>
+    <div class="audio-list">${audios.map(u => `<audio controls src="${u}" style="width:100%;margin-bottom:8px"></audio>`).join('')}</div>`;
   overlay.onclick = (e) => { if (e.target === overlay || e.target.tagName === 'BUTTON') overlay.remove(); };
   document.body.appendChild(overlay);
 }

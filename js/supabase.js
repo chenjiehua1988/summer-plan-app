@@ -67,6 +67,14 @@ export function todayStr(d = new Date()) {
   return `${y}-${m}-${day}`;
 }
 
+// 工具：从时间戳取 HH:MM（本地时区）
+export function hm(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  if (isNaN(d)) return '';
+  return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+}
+
 // 工具：生成分段选择卡 HTML（替代选项少的下拉框）
 // opts: [{value,label}] 或 ['a','b']；currentVal: 当前选中值；block: 是否撑满
 export function segHtml(opts, currentVal, block = false) {

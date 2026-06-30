@@ -306,6 +306,25 @@ body {
 .photo-grid { overflow-y: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .photo-grid img { width: 100%; border-radius: 8px; }
 
+/* 打卡面板（底部抽屉） */
+.checkin-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 280;
+  display: flex; align-items: flex-end; }
+.checkin-sheet { background: var(--card); border-radius: 16px 16px 0 0; width: 100%; max-width: 640px;
+  margin: 0 auto; padding: 16px 16px calc(20px + var(--safe-bottom));
+  max-height: 90vh; overflow-y: auto; }
+.checkin-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.checkin-title { font-weight: 700; font-size: 16px; }
+.checkin-note { width: 100%; padding: 11px; border: 1px solid var(--line); border-radius: 10px; font-size: 15px; margin-bottom: 10px; }
+.checkin-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.checkin-rec { display: flex; align-items: center; gap: 10px; padding: 10px; background: var(--bg); border-radius: 10px; margin-bottom: 10px; font-size: 14px; }
+.checkin-rec #ckRecTime { font-weight: 700; color: var(--primary); min-width: 48px; }
+.checkin-hint { color: var(--muted); font-size: 12px; flex: 1; }
+.checkin-picked { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; min-height: 8px; }
+.pick-chip { background: var(--bg); border-radius: 8px; padding: 4px 8px; font-size: 12px; display: inline-flex; align-items: center; gap: 4px; }
+.pick-chip b { color: var(--no); cursor: pointer; font-weight: 700; }
+.checkin-submit { width: 100%; padding: 13px; font-size: 15px; }
+.audio-list { padding: 8px 0; }
+
 /* 积分浮层 */
 #pointsModal { z-index: 250; }
 .points-modal-inner { background: var(--bg); border-radius: 14px 14px 0 0; max-width: 640px; margin: auto auto 0; width: 100%; max-height: 88vh; overflow-y: auto; padding: 12px 14px calc(20px + var(--safe-bottom)); }

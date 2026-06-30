@@ -1,7 +1,7 @@
 // ============================================================
 // 父母验收视图：展示孩子已完成的任务，验收通过 / 打回
 // ============================================================
-import { state, todayStr, toast } from './supabase.js';
+import { state, todayStr, toast, hm } from './supabase.js';
 import * as db from './db.js';
 
 export async function renderVerify(view) {
@@ -76,10 +76,18 @@ export async function renderVerify(view) {
       viewPhotos(r?.photos || []);
     };
   });
+  view.querySelectorAll('[data-viewaudio]').forEach(b => {
+    b.onclick = () => {
+      const id = b.dataset.viewaudio;
+      const r = records.find(x => x.id === id);
+      viewAudios(r?.audios || []);
+    };
+  });
 }
 
 function verifyRow(r) {
   const photos = r.photos || [];
+  const audios = r.audios || [];
   return `
     <li class="task-item" data-id="${r.id}">
       <div class="task-body" style="flex:1">
@@ -88,7 +96,9 @@ function verifyRow(r) {
           <span class="subj subj-${r.subject}">${r.subject}</span>
           <span class="note">+${r.points} 分</span>
           ${photos.length ? `<span class="task-photos link" data-viewphoto="${r.id}">📷 ${photos.length}</span>` : ''}
+          ${audios.length ? `<span class="task-photos link" data-viewaudio="${r.id}">🎙 ${audios.length}</span>` : ''}
           ${r.note ? `<span class="note">📝 ${r.note}</span>` : ''}
+          ${r.completed_at ? `<span class="note">打卡 ${hm(r.completed_at)}</span>` : ''}
         </div>
         <input class="vnote" data-for="${r.id}" type="text" placeholder="备注（可选）" />
         <button class="btn-ghost btn-sm" data-addphoto="${r.id}" style="margin-top:6px">📷 补拍照片</button>
@@ -103,6 +113,7 @@ function doneRow(r) {
   const cls = r.status === 'verified' ? 'badge-ok' : 'badge-no';
   const txt = r.status === 'verified' ? '已验收' : '已打回';
   const photos = r.photos || [];
+  const audios = r.audios || [];
   return `
     <li class="task-item is-done">
       <div class="task-body" style="flex:1">
@@ -111,7 +122,10 @@ function doneRow(r) {
           <span class="subj subj-${r.subject}">${r.subject}</span>
           <span class="badge ${cls}">${txt}</span>
           ${photos.length ? `<span class="task-photos link" data-viewphoto="${r.id}">📷 ${photos.length}</span>` : ''}
+          ${audios.length ? `<span class="task-photos link" data-viewaudio="${r.id}">🎙 ${audios.length}</span>` : ''}
           ${r.note ? `<span class="note">📝 ${r.note}</span>` : ''}
+          ${r.completed_at ? `<span class="note">打卡 ${hm(r.completed_at)}</span>` : ''}
+          ${r.verified_at ? `<span class="note">验收 ${hm(r.verified_at)}</span>` : ''}
         </div>
       </div>
     </li>`;
@@ -125,6 +139,16 @@ function viewPhotos(photos) {
   overlay.innerHTML = `
     <div class="photo-bar"><span>照片 ${photos.length} 张</span><button class="btn-ghost btn-sm">关闭</button></div>
     <div class="photo-grid">${photos.map(u => `<img src="${u}" />`).join('')}</div>`;
+  overlay.onclick = (e) => { if (e.target === overlay || e.target.tagName === 'BUTTON') overlay.remove(); };
+  document.body.appendChild(overlay);
+}
+function viewAudios(audios) {
+  if (!audios.length) return;
+  const overlay = document.createElement('div');
+  overlay.className = 'photo-overlay';
+  overlay.innerHTML = `
+    <div class="photo-bar"><span>录音 ${audios.length} 段</span><button class="btn-ghost btn-sm">关闭</button></div>
+    <div class="audio-list">${audios.map(u => `<audio controls src="${u}" style="width:100%;margin-bottom:8px"></audio>`).join('')}</div>`;
   overlay.onclick = (e) => { if (e.target === overlay || e.target.tagName === 'BUTTON') overlay.remove(); };
   document.body.appendChild(overlay);
 }
