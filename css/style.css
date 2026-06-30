@@ -18,13 +18,14 @@
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-html, body { margin: 0; padding: 0; height: 100%; }
+html, body { margin: 0; padding: 0; }
 body {
   font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
   background: var(--bg); color: var(--text);
   font-size: 15px; line-height: 1.5;
   padding-top: calc(52px + var(--safe-top));
-  padding-bottom: calc(62px + var(--safe-bottom));
+  padding-bottom: calc(72px + var(--safe-bottom));
+  min-height: 100vh;
 }
 
 /* 顶栏 */

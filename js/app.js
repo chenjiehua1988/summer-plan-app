@@ -24,6 +24,7 @@ async function boot() {
   bindTabs();
   bindChildSwitcher();
   bindPlanSwitcher();
+  bindLogoutTop();
   window.addEventListener('online', () => { toast('已联网，同步中…'); db.flushQueue(); refreshCurrent(); });
 
   const fam = await auth.restoreSession();
@@ -84,6 +85,19 @@ function registerSW() {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(e => console.warn('SW reg fail', e));
   }
+}
+
+// 顶栏退出登录（家长/孩子通用）
+function bindLogoutTop() {
+  const btn = document.getElementById('btnLogoutTop');
+  if (!btn) return;
+  btn.onclick = async () => {
+    if (!confirm('确定退出登录？')) return;
+    await auth.logout();
+    applyModeUI();
+    fillChildSwitcher(); fillPlanSwitcher();
+    showAuth();
+  };
 }
 
 // ---------- 鉴权 UI（家长/孩子） ----------
