@@ -3,7 +3,7 @@
 // 设计：Supabase 为唯一权威源；IndexedDB 仅缓存近 14 天数据供离线浏览。
 // 断网时打卡进入本地队列，联网后批量 upsert，带 updated_at 时间戳做 LWW。
 // ============================================================
-import { supabase, state, toast } from './supabase.js';
+import { supabase, state, toast, actorName } from './supabase.js';
 
 const DB_NAME = 'summer-plan-cache';
 const DB_VERSION = 1;
@@ -282,7 +282,7 @@ async function getCachedRecordsById(id) {
 // 验收：把记录置为 verified/rejected（仅父母）
 export async function verifyRecord(id, status, note) {
   const patch = { status, note: note ?? null,
-    verified_at: new Date().toISOString(), verified_by: state.currentRole };
+    verified_at: new Date().toISOString(), verified_by: actorName() };
   return updateRecord(id, patch); // 复用在线/离线逻辑；verified 触发器在服务端自动加分
 }
 
@@ -294,7 +294,7 @@ export async function fetchLifeLogs(childId, fromDate, toDate) {
   return data || [];
 }
 export async function addLifeLog(row) {
-  const payload = { ...row, family_id: state.family.id, created_by: state.currentRole };
+  const payload = { ...row, family_id: state.family.id, created_by: actorName() };
   const { data, error } = await supabase.from('life_logs').insert(payload).select().single();
   if (error) throw error;
   return data;
@@ -324,12 +324,12 @@ export async function redeemReward(childId, shopItem) {
   // 扣减积分：写一条负数流水 + 一条奖励记录
   const { error: e1 } = await supabase.from('point_ledger').insert({
     family_id: state.family.id, child_id: childId,
-    delta: -shopItem.cost_points, reason: '兑换奖励：' + shopItem.name, created_by: state.currentRole
+    delta: -shopItem.cost_points, reason: '兑换奖励：' + shopItem.name, created_by: actorName()
   });
   if (e1) throw e1;
   const { data, error: e2 } = await supabase.from('rewards').insert({
     family_id: state.family.id, child_id: childId, shop_id: shopItem.id || null,
-    name: shopItem.name, cost_points: shopItem.cost_points, redeemed_by: state.currentRole
+    name: shopItem.name, cost_points: shopItem.cost_points, redeemed_by: actorName()
   }).select().single();
   if (e2) throw e2;
   return data;
@@ -488,5 +488,60 @@ export async function appendPhotos(recordId, newUrls) {
     .eq('id', recordId).select().single();
   if (error) throw error;
   await cacheRecords([data]);
+  return data;
+}
+
+// ---------- 兑换申请 ----------
+
+// 孩子发起申请
+export async function addRedeemRequest(childId, shopItem) {
+  const row = { family_id: state.family.id, child_id: childId,
+    shop_id: shopItem.id || null, name: shopItem.name, cost_points: shopItem.cost_points,
+    status: 'pending' };
+  const { data, error } = await supabase.from('redeem_requests').insert(row).select().single();
+  if (error) throw error;
+  return data;
+}
+// 取某孩子的申请（孩子端看）
+export async function fetchRedeemRequestsByChild(childId) {
+  const { data, error } = await supabase.from('redeem_requests').select('*')
+    .eq('child_id', childId).order('created_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+// 取全家庭 pending 申请（家长端审批）
+export async function fetchPendingRequests() {
+  const { data, error } = await supabase.from('redeem_requests').select('*')
+    .eq('family_id', state.family.id).eq('status', 'pending')
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+// 家长审批：approve → 扣分 + 写 rewards + 置 approved；reject → 置 rejected
+export async function decideRedeemRequest(req, approve) {
+  if (approve) {
+    // 校验余额
+    const bal = await fetchPointBalance(req.child_id);
+    if (req.cost_points > bal) throw new Error('孩子积分不足（当前 ' + bal + ' 分）');
+    // 扣分流水
+    const { error: e1 } = await supabase.from('point_ledger').insert({
+      family_id: state.family.id, child_id: req.child_id,
+      delta: -req.cost_points, reason: '兑换奖励：' + req.name, created_by: actorName()
+    });
+    if (e1) throw e1;
+    // rewards 记录
+    const { error: e2 } = await supabase.from('rewards').insert({
+      family_id: state.family.id, child_id: req.child_id, shop_id: req.shop_id || null,
+      name: req.name, cost_points: req.cost_points, redeemed_by: actorName()
+    });
+    if (e2) throw e2;
+  }
+  // 置状态
+  const { data, error } = await supabase.from('redeem_requests').update({
+    status: approve ? 'approved' : 'rejected',
+    decided_by: actorName(), decided_at: new Date().toISOString()
+  }).eq('id', req.id).select().single();
+  if (error) throw error;
   return data;
 }

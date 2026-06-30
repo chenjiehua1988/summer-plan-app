@@ -23,7 +23,6 @@ async function boot() {
   bindAuthUI();
   bindTabs();
   bindChildSwitcher();
-  bindRoleSwitcher();
   bindPlanSwitcher();
   window.addEventListener('online', () => { toast('已联网，同步中…'); db.flushQueue(); refreshCurrent(); });
 
@@ -34,18 +33,22 @@ async function boot() {
 
 async function maybeEnterApp() {
   if (!state.family?.id) { showAuth(); return; }
-  syncRoleSwitcher();
   await db.fetchChildren();
-  if (!state.currentChildId && state.children.length) {
+  // child 模式：currentChildId 已是登录选的；parent 模式：默认第一个
+  if (state.mode === 'child') {
+    // 确保孩子存在
+    if (!state.children.find(c => c.id === state.currentChildId) && state.children.length) {
+      state.currentChildId = state.children[0].id;
+    }
+  } else if (!state.currentChildId && state.children.length) {
     state.currentChildId = state.children[0].id;
   }
-  // 加载周期与标签
+  // 加载周期与标签（孩子模式也需要周期来打卡）
   try {
     state.plans = await db.fetchPlans();
     state.tags = await db.fetchTags();
-    state.planTypes = await db.fetchPlanTypes();
+    if (state.mode === 'parent') state.planTypes = await db.fetchPlanTypes();
   } catch (e) { console.warn('load plans/tags', e); }
-  // 恢复或选第一个 active 周期
   if (state.currentPlanId && !state.plans.find(p => p.id === state.currentPlanId)) {
     state.currentPlanId = null;
   }
@@ -53,10 +56,28 @@ async function maybeEnterApp() {
     const firstActive = state.plans.find(p => p.status === 'active') || state.plans[0];
     if (firstActive) { state.currentPlanId = firstActive.id; auth.switchPlan(firstActive.id); }
   }
+  applyModeUI();
   fillChildSwitcher();
   fillPlanSwitcher();
   authScreen.style.display = 'none';
+  // child 模式默认进 today；parent 若上次在 verify/setup 则回落 today
+  if (state.mode === 'child' && (state.pendingTab === 'verify' || state.pendingTab === 'setup')) {
+    state.pendingTab = 'today';
+  }
   switchTab(state.pendingTab || 'today');
+}
+
+// 按 mode 显示/隐藏 UI：child 隐藏验收/设置 tab，隐藏孩子切换器（孩子只看自己）
+function applyModeUI() {
+  const isChild = state.mode === 'child';
+  document.querySelectorAll('.tab').forEach(t => {
+    const tab = t.dataset.tab;
+    if (isChild && (tab === 'verify' || tab === 'setup' || tab === 'life')) t.style.display = 'none';
+    else t.style.display = '';
+  });
+  // 孩子模式隐藏孩子切换器（只看自己）
+  const cs = document.getElementById('childSwitcher');
+  if (cs) cs.style.display = isChild ? 'none' : '';
 }
 
 function registerSW() {
@@ -65,9 +86,23 @@ function registerSW() {
   }
 }
 
-// ---------- 鉴权 UI（家庭密码版） ----------
+// ---------- 鉴权 UI（家长/孩子） ----------
 function bindAuthUI() {
   const $ = id => document.getElementById(id);
+  // 家长 / 孩子 顶部切换
+  const tabParent = $('tabParent'), tabChild = $('tabChild');
+  const showParent = () => {
+    tabParent.classList.add('active'); tabChild.classList.remove('active');
+    $('parentBox').style.display = ''; $('childBox').style.display = 'none'; authMsg('');
+  };
+  const showChild = () => {
+    tabChild.classList.add('active'); tabParent.classList.remove('active');
+    $('parentBox').style.display = 'none'; $('childBox').style.display = ''; authMsg('');
+  };
+  tabParent.onclick = showParent;
+  tabChild.onclick = showChild;
+
+  // 家长：登录/创建 子tab
   const tabLogin = $('tabLogin'), tabCreate = $('tabCreate');
   const showLogin = () => {
     tabLogin.classList.add('active'); tabCreate.classList.remove('active');
@@ -83,29 +118,38 @@ function bindAuthUI() {
   tabCreate.onclick = showCreate;
 
   $('btnLogin').onclick = async () => {
-    try { await auth.loginWithPassword($('familyName').value, $('password').value); await maybeEnterApp(); }
+    try { await auth.loginAsParent($('familyName').value, $('password').value, $('loginRole').value); await maybeEnterApp(); }
     catch (e) { authMsg(e.message); }
   };
   $('btnCreateFamily').onclick = async () => {
     try {
-      await auth.createFamily($('familyName').value, $('password').value, $('newRole').value);
+      await auth.createFamily($('familyName').value, $('password').value, $('loginRole').value);
       await maybeEnterApp();
     } catch (e) { authMsg(e.message); }
+  };
+
+  // 孩子登录
+  $('btnLoadKids').onclick = async () => {
+    const fn = $('childFamilyName').value.trim();
+    if (!fn) { authMsg('请填家庭名'); return; }
+    const kids = await auth.fetchChildrenOf(fn);
+    if (!kids.length) { authMsg('找不到该家庭或还没有孩子档案'); return; }
+    const sel = $('childPick');
+    sel.innerHTML = kids.map(k => `<option value="${k.id}">${k.name}（${k.grade_target || ''}）</option>`).join('');
+    sel.style.display = '';
+    $('btnChildLogin').style.display = '';
+    authMsg('');
+  };
+  $('btnChildLogin').onclick = async () => {
+    const fn = $('childFamilyName').value.trim();
+    const cid = $('childPick').value;
+    if (!fn || !cid) { authMsg('请先查找家庭并选择自己'); return; }
+    try { await auth.loginAsChild(fn, cid); await maybeEnterApp(); }
+    catch (e) { authMsg(e.message); }
   };
 }
 function authMsg(m) { document.getElementById('authMsg').textContent = m; }
 function showAuth() { authScreen.style.display = 'flex'; }
-
-// ---------- 角色切换 ----------
-function bindRoleSwitcher() {
-  const sel = document.getElementById('roleSwitcher');
-  if (!sel) return;
-  sel.onchange = () => { auth.switchRole(sel.value); syncRoleSwitcher(); };
-}
-function syncRoleSwitcher() {
-  const sel = document.getElementById('roleSwitcher');
-  if (sel) sel.value = state.currentRole;
-}
 
 // ---------- 周期切换 ----------
 function bindPlanSwitcher() {
@@ -146,6 +190,10 @@ function bindTabs() {
   });
 }
 function switchTab(tab) {
+  // child 模式屏蔽 verify/setup
+  if (state.mode === 'child' && (tab === 'verify' || tab === 'setup')) return;
+  // life 暂未对孩子适配，孩子模式下也屏蔽
+  if (state.mode === 'child' && tab === 'life') return;
   state.pendingTab = tab;
   document.querySelectorAll('.tab').forEach(t =>
     t.classList.toggle('active', t.dataset.tab === tab));
@@ -156,10 +204,10 @@ function refreshCurrent() {
   if (!state.family?.id) return;
   const tab = state.pendingTab;
   if (tab === 'today') renderToday(view);
-  else if (tab === 'verify') renderVerify(view);
+  else if (tab === 'verify' && state.mode === 'parent') renderVerify(view);
   else if (tab === 'stats') renderStats(view);
-  else if (tab === 'life') renderLife(view);
-  else if (tab === 'setup') renderSetup(view);
+  else if (tab === 'life' && state.mode === 'parent') renderLife(view);
+  else if (tab === 'setup' && state.mode === 'parent') renderSetup(view);
   refreshPointBadge();
 }
 
@@ -193,11 +241,12 @@ function renderSetup(view) {
     <div class="section-title">家庭</div>
     <div class="card">
       <div class="row-line"><span>家庭名称</span><span>${state.family?.name || '—'}</span></div>
-      <div class="row-line"><span>当前角色</span>
-        <select id="roleSwitcher2"><option value="妈妈">妈妈</option><option value="爸爸">爸爸</option></select>
-      </div>
-      <div class="row-hint">爸妈共用一个家庭密码，这里切换当前操作人。</div>
+      <div class="row-line"><span>当前身份</span><span>${state.role}（家长）</span></div>
+      <div class="row-hint">家长角色登录时已固定，不可切换。退出后可换另一个家长身份登录。</div>
     </div>
+
+    <div class="section-title">兑换申请</div>
+    <div class="card" id="redeemReqCard"></div>
 
     <div class="section-title">周期类型管理</div>
     <div class="card" id="planTypesCard"></div>
@@ -254,9 +303,7 @@ function renderSetup(view) {
     <div class="card"><button class="btn-ghost btn-sm" id="btnLogout">退出登录</button></div>
   `;
 
-  const rs2 = view.querySelector('#roleSwitcher2');
-  if (rs2) { rs2.value = state.currentRole; rs2.onchange = () => { auth.switchRole(rs2.value); toast('已切换为 ' + rs2.value); }; }
-
+  renderRedeemReqCard();
   renderPlansCard();
   renderPlanTypesCard();
   fillPlanTypeSelect();
@@ -341,9 +388,46 @@ function renderSetup(view) {
   view.querySelector('#btnLogout').onclick = async () => {
     if (!confirm('确定退出登录？')) return;
     await auth.logout();
+    applyModeUI();
     fillChildSwitcher(); fillPlanSwitcher();
     showAuth();
   };
+}
+
+function renderRedeemReqCard() {
+  const card = document.getElementById('redeemReqCard');
+  if (!card) return;
+  db.fetchPendingRequests().then(list => {
+    // 关联孩子名
+    card.innerHTML = list.length
+      ? list.map(r => {
+          const kid = state.children.find(c => c.id === r.child_id);
+          return `<div class="mgmt-row">
+            <div class="grow">
+              <div>${kid ? kid.name : '?'} 想兑「${r.name}」<small style="color:var(--warn)"> ${r.cost_points}分</small></div>
+              <small style="color:var(--muted)">${(r.created_at||'').slice(0,16).replace('T',' ')}</small>
+            </div>
+            <button class="btn-primary btn-sm" data-approve="${r.id}">同意</button>
+            <button class="btn-ghost btn-sm" data-reject="${r.id}">拒绝</button>
+          </div>`;
+        }).join('')
+      : `<div class="empty">没有待审批的兑换申请。</div>`;
+    card.querySelectorAll('[data-approve]').forEach(b => {
+      b.onclick = async () => {
+        const r = list.find(x => x.id === b.dataset.approve);
+        try { await db.decideRedeemRequest(r, true); toast('已同意，已扣分'); renderRedeemReqCard(); if (window.refreshPointBadge) window.refreshPointBadge(); }
+        catch (e) { toast('操作失败：' + e.message); }
+      };
+    });
+    card.querySelectorAll('[data-reject]').forEach(b => {
+      b.onclick = async () => {
+        const r = list.find(x => x.id === b.dataset.reject);
+        if (!confirm('拒绝该申请？')) return;
+        try { await db.decideRedeemRequest(r, false); toast('已拒绝'); renderRedeemReqCard(); }
+        catch (e) { toast('操作失败：' + e.message); }
+      };
+    });
+  }).catch(e => { card.innerHTML = `<div class="empty">加载失败</div>`; });
 }
 
 function renderPlanTypesCard() {

@@ -25,10 +25,6 @@
       <div id="planCountdown" class="plan-countdown"></div>
     </div>
     <div class="topbar-right">
-      <select id="roleSwitcher" class="role-switcher" aria-label="切换角色">
-        <option value="妈妈">妈妈</option>
-        <option value="爸爸">爸爸</option>
-      </select>
       <button id="btnPoints" class="chip" title="积分">⭐ <span id="pointBalance">0</span></button>
     </div>
   </header>
@@ -49,29 +45,45 @@
   <div id="authScreen" class="auth-screen">
     <div class="auth-card">
       <h1>学习计划</h1>
-      <p class="auth-sub">一个家庭一个密码，爸妈共用</p>
+      <p class="auth-sub">家庭学习管理 · 爸妈与孩子共同使用</p>
 
       <div class="auth-tabbar">
-        <button id="tabLogin" class="auth-tab active">登录</button>
-        <button id="tabCreate" class="auth-tab">首次创建家庭</button>
+        <button id="tabParent" class="auth-tab active">家长</button>
+        <button id="tabChild" class="auth-tab">我是孩子</button>
       </div>
 
-      <input id="familyName" type="text" placeholder="家庭名（如：张家）" />
-      <input id="password" type="password" placeholder="家庭密码（至少 4 位）" />
-
-      <div id="createExtra" class="create-extra" style="display:none">
-        <label class="role-pick">你是：
-          <select id="newRole">
+      <!-- 家长区 -->
+      <div id="parentBox">
+        <div class="auth-subtab">
+          <button id="tabLogin" class="auth-subtab-btn active">登录</button>
+          <button id="tabCreate" class="auth-subtab-btn">首次创建家庭</button>
+        </div>
+        <input id="familyName" type="text" placeholder="家庭名（如：张家）" />
+        <input id="password" type="password" placeholder="家庭密码（至少 4 位）" />
+        <div class="role-pick">你是：
+          <select id="loginRole">
             <option value="妈妈">妈妈</option>
             <option value="爸爸">爸爸</option>
           </select>
-        </label>
+        </div>
+        <div id="createExtra" class="create-extra" style="display:none">
+          <p class="auth-hint">创建家庭时角色仅用于本次登录，家人登录时各自选。</p>
+        </div>
+        <button id="btnLogin" class="btn-primary">登录</button>
+        <button id="btnCreateFamily" class="btn-primary" style="display:none">创建家庭</button>
+        <p class="auth-hint">家长角色登录后固定，不可切换。</p>
       </div>
 
-      <button id="btnLogin" class="btn-primary">登录</button>
-      <button id="btnCreateFamily" class="btn-primary" style="display:none">创建家庭</button>
+      <!-- 孩子区 -->
+      <div id="childBox" style="display:none">
+        <input id="childFamilyName" type="text" placeholder="家庭名" />
+        <button id="btnLoadKids" class="btn-ghost">查找家庭</button>
+        <select id="childPick" style="display:none"></select>
+        <button id="btnChildLogin" class="btn-primary" style="display:none">进入</button>
+        <p class="auth-hint">孩子模式：只能打卡、拍照、申请兑换，不能改设置或验收。</p>
+      </div>
+
       <p id="authMsg" class="auth-msg"></p>
-      <p class="auth-hint">提示：家庭自用，密码请全家约定一致。爸妈登录后可在右上角切换角色。</p>
     </div>
   </div>
 

@@ -14,12 +14,13 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 });
 
 // 全局当前状态（在 app.js / 各模块间共享）
-// 不再用 Supabase Auth；登录态 = 本地存的 familyId + 角色名 + 当前周期
+// 登录态 = 本地存的 familyId + mode(parent/child) + role(妈妈/爸爸) + childId(孩子模式) + 当前周期
 export const state = {
   family: null,         // families 行（含 id, name）
-  currentRole: '妈妈',  // 当前操作角色：妈妈/爸爸
+  mode: 'parent',       // 'parent' | 'child'
+  role: '妈妈',          // 家长角色（登录时固定，不可改）
   children: [],         // 孩子列表
-  currentChildId: null, // 当前选中的孩子
+  currentChildId: null, // 当前选中的孩子（child 模式下固定为登录孩子）
   currentPlanId: null,  // 当前学习周期
   plans: [],            // 周期列表
   planTypes: [],        // 周期类型列表
@@ -28,10 +29,19 @@ export const state = {
   pendingTab: 'today'
 };
 
-// 本地持久化登录态（familyId + 角色 + 当前周期），localStorage
+// 操作人名：parent 模式=角色(妈妈/爸爸)，child 模式=当前孩子名
+export function actorName() {
+  if (state.mode === 'child') {
+    const c = state.children.find(x => x.id === state.currentChildId);
+    return c ? c.name : '孩子';
+  }
+  return state.role;
+}
+
+// 本地持久化登录态，localStorage
 const LS_KEY = 'summer-plan-session';
-export function saveSession(familyId, role, planId) {
-  localStorage.setItem(LS_KEY, JSON.stringify({ familyId, role, planId }));
+export function saveSession(s) {
+  localStorage.setItem(LS_KEY, JSON.stringify(s));
 }
 export function loadSessionLocal() {
   try { return JSON.parse(localStorage.getItem(LS_KEY) || 'null'); }

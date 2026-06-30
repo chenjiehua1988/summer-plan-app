@@ -1,7 +1,7 @@
 // ============================================================
 // 任务模板管理 + 每日打卡视图（按周期 + 标签）
 // ============================================================
-import { state, todayStr, toast } from './supabase.js';
+import { state, todayStr, toast, actorName } from './supabase.js';
 import * as db from './db.js';
 
 // 今日打卡视图：渲染当天 daily_records，按标签分组；支持假期标记与打卡拍照
@@ -46,9 +46,11 @@ export async function renderToday(view) {
     <div class="dayoff-bar">
       ${dayOff
         ? `<span>🏖️ 今天是假期${dayOff.reason ? '（' + dayOff.reason + '）' : ''}</span>
-           <button class="btn-ghost btn-sm" id="unmarkDayOff">取消假期</button>`
-        : `<button class="btn-ghost btn-sm" id="markDayOff">今天设为假期</button>
-           <button class="btn-ghost btn-sm" id="presetDayOff">预设其他日期假期</button>`}
+           ${state.mode === 'parent' ? `<button class="btn-ghost btn-sm" id="unmarkDayOff">取消假期</button>` : ''}`
+        : (state.mode === 'parent'
+            ? `<button class="btn-ghost btn-sm" id="markDayOff">今天设为假期</button>
+               <button class="btn-ghost btn-sm" id="presetDayOff">预设其他日期假期</button>`
+            : `<span style="color:var(--muted)">今天正常学习</span>`)}
     </div>
     ${records.length === 0 ? `<div class="empty">今天还没有任务。去「设置」给当前周期/孩子添加任务清单。</div>` : ''}
     ${groupKeys.map(g => `
@@ -149,7 +151,7 @@ function openCheckinPanel(id, r, records, el) {
     try {
       // 先更新 note + 状态 done
       const patch = { status: 'done', note: note || null,
-        completed_at: new Date().toISOString(), completed_by: state.currentRole };
+        completed_at: new Date().toISOString(), completed_by: actorName() };
       await db.updateRecord(id, patch);
       Object.assign(r, patch);
       // 上传照片

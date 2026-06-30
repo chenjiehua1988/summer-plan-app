@@ -15,13 +15,16 @@ export async function refreshPointBadge() {
   } catch (e) { /* 静默 */ }
 }
 
-// 积分中心（嵌入设置页区域）：余额 + 兑换商店 + 流水 + 兑换记录
+// 积分中心：parent 直接兑换；child 申请兑换（爸妈审批）
 export async function renderPoints(container, childId) {
   container.innerHTML = `<div class="loading">加载中…</div>`;
-  const [ledger, rewards, balance, shop] = await Promise.all([
-    db.fetchLedger(childId), db.fetchRewards(childId), db.fetchPointBalance(childId), db.fetchShop()
+  const isChild = state.mode === 'child';
+  const [ledger, rewards, balance, shop, reqs] = await Promise.all([
+    db.fetchLedger(childId), db.fetchRewards(childId), db.fetchPointBalance(childId), db.fetchShop(),
+    db.fetchRedeemRequestsByChild(childId)
   ]);
   const onShop = shop.filter(s => s.active);
+  const btnLabel = isChild ? '我想兑换' : '兑换';
 
   container.innerHTML = `
     <div class="balance-card">
@@ -36,9 +39,23 @@ export async function renderPoints(container, childId) {
           <div class="shop-icon">${s.icon || '🎁'}</div>
           <div class="shop-name">${s.name}</div>
           <div class="shop-cost">${s.cost_points} 分</div>
-          <button class="btn-primary btn-sm shop-btn" data-redeem="${s.id}">兑换</button>
+          <button class="btn-primary btn-sm shop-btn" data-redeem="${s.id}">${btnLabel}</button>
         </div>`).join('')}
-    </div>` : `<div class="empty">商店还没有上架奖励。去上方「兑换商店目录」添加。</div>`}
+    </div>` : `<div class="empty">商店还没有上架奖励。</div>`}
+
+    ${isChild && reqs.length ? `
+      <div class="section-title">我的兑换申请</div>
+      <ul class="ledger-list">
+        ${reqs.slice(0, 20).map(r => {
+          const st = r.status === 'pending' ? '待审批' : r.status === 'approved' ? '已同意' : '已拒绝';
+          const cls = r.status === 'pending' ? 'badge-mid' : r.status === 'approved' ? 'badge-ok' : 'badge-no';
+          return `<li class="ledger-row">
+            <div><div class="ledger-reason">${r.name} <span class="badge ${cls}">${st}</span></div>
+            <small>${(r.created_at||'').slice(0,16).replace('T',' ')}</small></div>
+            <div class="ledger-delta minus">-${r.cost_points}</div>
+          </li>`;
+        }).join('')}
+      </ul>` : ''}
 
     <div class="section-title">积分流水</div>
     ${ledger.length === 0 ? `<div class="empty">还没有积分记录。</div>` : `
@@ -67,14 +84,25 @@ export async function renderPoints(container, childId) {
     b.onclick = async () => {
       const s = shop.find(x => x.id === b.dataset.redeem);
       if (!s) return;
-      if (s.cost_points > balance) { toast('积分不足'); return; }
-      if (!confirm(`兑换「${s.name}」，扣 ${s.cost_points} 分？`)) return;
-      try {
-        await db.redeemReward(childId, s);
-        toast('兑换成功 🎁');
-        await refreshPointBadge();
-        renderPoints(container, childId);
-      } catch (e) { toast('兑换失败：' + e.message); }
+      if (isChild) {
+        // 申请兑换
+        if (!confirm(`申请兑换「${s.name}」（${s.cost_points} 分）？\n需爸妈同意后才能扣分兑付。`)) return;
+        try {
+          await db.addRedeemRequest(childId, s);
+          toast('已申请，等爸妈同意');
+          renderPoints(container, childId);
+        } catch (e) { toast('申请失败：' + e.message); }
+      } else {
+        if (s.cost_points > balance) { toast('积分不足'); return; }
+        if (!confirm(`兑换「${s.name}」，扣 ${s.cost_points} 分？`)) return;
+        try {
+          await db.redeemReward(childId, s);
+          toast('兑换成功 🎁');
+          await refreshPointBadge();
+          renderPoints(container, childId);
+        } catch (e) { toast('兑换失败：' + e.message); }
+      }
     };
   });
 }
+

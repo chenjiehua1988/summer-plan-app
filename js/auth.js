@@ -1,29 +1,60 @@
 // ============================================================
-// 鉴权（单一家庭密码版）
-// - 创建家庭：设家庭名 + 共同密码 + 首个角色（妈妈/爸爸）→ 写入 families（密码 bcrypt 哈希）
-// - 登录：输家庭名 + 密码 → 用 crypt 校验 → 命中则存本地 session
-// - 切换角色：本地切换 妈妈/爸爸，无需重新登录
-// 不使用 Supabase Auth。
+// 鉴权（家长/孩子模式）
+// - 家长登录：家庭名 + 密码 + 选妈妈/爸爸 → 角色 fixed
+// - 孩子登录：家庭名 + 选自己 → 孩子模式（不验密码）
+// - 创建家庭：家庭名 + 密码 + 角色
+// 不使用 Supabase Auth。角色登录后不可改。
 // ============================================================
 import { supabase, state, saveSession, loadSessionLocal, clearSession, toast } from './supabase.js';
 
-// 用数据库的 crypt/cmp 校验密码：取回该家庭名的 password_hash，再用 RPC 比对
-// 为避免暴露哈希到前端，用 SQL 函数 pw_match 校验
-export async function loginWithPassword(familyName, password) {
-  // 调 RPC：返回 family_id 或 null
+function persist() {
+  saveSession({
+    familyId: state.family?.id, mode: state.mode, role: state.role,
+    childId: state.currentChildId, planId: state.currentPlanId
+  });
+}
+
+// 家长登录（含角色）
+export async function loginAsParent(familyName, password, role) {
   const { data, error } = await supabase.rpc('pw_match', {
     p_name: familyName.trim(), p_pw: password
   });
   if (error) throw error;
   if (!data) throw new Error('家庭名或密码不对');
-  // data 是 family id（uuid 字符串）
   const { data: fam, error: fe } = await supabase
     .from('families').select('id, name').eq('id', data).single();
   if (fe) throw fe;
   state.family = fam;
-  state.currentRole = '妈妈';
-  saveSession(fam.id, state.currentRole);
+  state.mode = 'parent';
+  state.role = role || '妈妈';
+  persist();
   return fam;
+}
+
+// 兼容旧调用
+export const loginWithPassword = (f, p) => loginAsParent(f, p, '妈妈');
+
+// 孩子登录：家庭名 + childId
+export async function loginAsChild(familyName, childId) {
+  const { data: fam, error } = await supabase
+    .from('families').select('id, name').eq('name', familyName.trim()).maybeSingle();
+  if (error) throw error;
+  if (!fam) throw new Error('家庭名不存在');
+  state.family = fam;
+  state.mode = 'child';
+  state.currentChildId = childId;
+  persist();
+  return fam;
+}
+
+// 拉某家庭的孩子列表（孩子登录时选自己用）
+export async function fetchChildrenOf(familyName) {
+  const { data: fam, error } = await supabase
+    .from('families').select('id').eq('name', familyName.trim()).maybeSingle();
+  if (error || !fam) return [];
+  const { data: kids } = await supabase
+    .from('children').select('id,name,grade_target').eq('family_id', fam.id).order('created_at');
+  return kids || [];
 }
 
 // 创建家庭
@@ -31,11 +62,9 @@ export async function createFamily(familyName, password, role) {
   familyName = familyName.trim();
   if (!familyName) throw new Error('请填家庭名');
   if (!password || password.length < 4) throw new Error('密码至少 4 位');
-  // 检查同名
   const { data: exist } = await supabase
     .from('families').select('id').eq('name', familyName).maybeSingle();
   if (exist) throw new Error('这个家庭名已存在，换一个或直接登录');
-  // 哈希用 RPC 在数据库侧算（gen_salt('bf')），避免前端哈希库
   const { data: hash, error: he } = await supabase.rpc('pw_hash', { p_pw: password });
   if (he) throw he;
   const { data: fam, error: ie } = await supabase
@@ -43,13 +72,14 @@ export async function createFamily(familyName, password, role) {
     .select('id, name').single();
   if (ie) throw ie;
   state.family = fam;
-  state.currentRole = role || '妈妈';
-  saveSession(fam.id, state.currentRole);
+  state.mode = 'parent';
+  state.role = role || '妈妈';
+  persist();
   toast('家庭已创建');
   return fam;
 }
 
-// 从本地 session 恢复（已登录过）
+// 从本地 session 恢复
 export async function restoreSession() {
   const s = loadSessionLocal();
   if (!s || !s.familyId) return null;
@@ -57,31 +87,28 @@ export async function restoreSession() {
     .from('families').select('id, name').eq('id', s.familyId).maybeSingle();
   if (error || !fam) { clearSession(); return null; }
   state.family = fam;
-  state.currentRole = s.role || '妈妈';
+  state.mode = s.mode || 'parent';
+  state.role = s.role || '妈妈';
+  state.currentChildId = s.childId || null;
   state.currentPlanId = s.planId || null;
   return fam;
-}
-
-export function switchRole(role) {
-  state.currentRole = role;
-  const s = loadSessionLocal();
-  if (s) saveSession(s.familyId, role, s.planId);
 }
 
 // 切换当前学习周期（持久化）
 export function switchPlan(planId) {
   state.currentPlanId = planId;
-  const s = loadSessionLocal();
-  if (s) saveSession(s.familyId, s.role, planId);
+  persist();
 }
 
 export async function logout() {
   clearSession();
   state.family = null;
-  state.currentRole = '妈妈';
+  state.mode = 'parent';
+  state.role = '妈妈';
   state.children = [];
   state.currentChildId = null;
   state.currentPlanId = null;
   state.plans = [];
   state.tags = [];
+  state.planTypes = [];
 }
