@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="暑假计划" />
+  <meta name="theme-color" content="#4f7cff" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+  <link rel="icon" href="./icons/icon-192.png" />
+  <link rel="stylesheet" href="./css/style.css" />
+  <title>暑假学习生活计划</title>
+</head>
+<body>
+  <!-- 顶部栏 -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <select id="childSwitcher" class="child-switcher" aria-label="切换孩子"></select>
+    </div>
+    <div class="topbar-title" id="topTitle">今日</div>
+    <div class="topbar-right">
+      <select id="roleSwitcher" class="role-switcher" aria-label="切换角色">
+        <option value="妈妈">妈妈</option>
+        <option value="爸爸">爸爸</option>
+      </select>
+      <button id="btnPoints" class="chip" title="积分">⭐ <span id="pointBalance">0</span></button>
+    </div>
+  </header>
+
+  <!-- 主内容区（各页面挂载点） -->
+  <main id="view" class="view"></main>
+
+  <!-- 底部导航 -->
+  <nav class="tabbar">
+    <button class="tab active" data-tab="today">📅<span>今日</span></button>
+    <button class="tab" data-tab="verify">✅<span>验收</span></button>
+    <button class="tab" data-tab="stats">📊<span>统计</span></button>
+    <button class="tab" data-tab="life">🏃<span>生活</span></button>
+    <button class="tab" data-tab="setup">⚙️<span>设置</span></button>
+  </nav>
+
+  <!-- 登录浮层（家庭密码版） -->
+  <div id="authScreen" class="auth-screen">
+    <div class="auth-card">
+      <h1>暑假学习生活计划</h1>
+      <p class="auth-sub">一个家庭一个密码，爸妈共用</p>
+
+      <div class="auth-tabbar">
+        <button id="tabLogin" class="auth-tab active">登录</button>
+        <button id="tabCreate" class="auth-tab">首次创建家庭</button>
+      </div>
+
+      <input id="familyName" type="text" placeholder="家庭名（如：张家）" />
+      <input id="password" type="password" placeholder="家庭密码（至少 4 位）" />
+
+      <div id="createExtra" class="create-extra" style="display:none">
+        <label class="role-pick">你是：
+          <select id="newRole">
+            <option value="妈妈">妈妈</option>
+            <option value="爸爸">爸爸</option>
+          </select>
+        </label>
+      </div>
+
+      <button id="btnLogin" class="btn-primary">登录</button>
+      <button id="btnCreateFamily" class="btn-primary" style="display:none">创建家庭</button>
+      <p id="authMsg" class="auth-msg"></p>
+      <p class="auth-hint">提示：家庭自用，密码请全家约定一致。爸妈登录后可在右上角切换角色。</p>
+    </div>
+  </div>
+
+  <!-- 通用提示条 -->
+  <div id="toast" class="toast"></div>
+
+  <!-- Supabase 客户端（ESM CDN） -->
+  <script type="module" src="https://esm.sh/@supabase/supabase-js@2"></script>
+  <!-- 业务脚本（模块化，依赖 supabase.js 导出 supabase） -->
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>
