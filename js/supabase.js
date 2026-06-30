@@ -66,3 +66,22 @@ export function todayStr(d = new Date()) {
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
 }
+
+// 工具：生成分段选择卡 HTML（替代选项少的下拉框）
+// opts: [{value,label}] 或 ['a','b']；currentVal: 当前选中值；block: 是否撑满
+export function segHtml(opts, currentVal, block = false) {
+  const arr = opts.map(o => typeof o === 'string' ? { value: o, label: o } : o);
+  return `<div class="seg ${block ? 'seg-block' : ''}">` + arr.map(o =>
+    `<button type="button" class="seg-btn ${o.value === currentVal ? 'on' : ''}" data-seg="${o.value}">${o.label}</button>`
+  ).join('') + `</div>`;
+}
+// 绑定分段卡：容器、选中回调
+export function bindSeg(container, onPick) {
+  container.querySelectorAll('.seg-btn').forEach(b => {
+    b.onclick = () => {
+      container.querySelectorAll('.seg-btn').forEach(x => x.classList.remove('on'));
+      b.classList.add('on');
+      onPick && onPick(b.dataset.seg);
+    };
+  });
+}

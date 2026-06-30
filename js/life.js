@@ -1,7 +1,7 @@
 // ============================================================
 // 生活项记录：运动 / 阅读 / 家务 / 屏幕时间
 // ============================================================
-import { state, todayStr, toast } from './supabase.js';
+import { state, todayStr, toast, segHtml, bindSeg } from './supabase.js';
 import * as db from './db.js';
 
 const TYPES = ['运动', '阅读', '家务', '屏幕时间'];
@@ -28,10 +28,11 @@ export async function renderLife(view) {
       <button class="btn-ghost btn-sm" id="refreshLife">刷新</button>
     </div>
     <div class="life-add">
-      <select id="lType">${TYPES.map(t=>`<option>${t}</option>`).join('')}</select>
-      <input id="lValue" type="text" placeholder="内容（如 跳绳200个 / 阅读30分钟）" />
+      <input id="lValue" type="text" placeholder="内容（如 跳绳200个 / 阅读30分钟）" class="grow" />
       <button class="btn-primary btn-sm" id="lAdd">记录</button>
     </div>
+    <div class="seg-block" id="lTypeSeg"></div>
+    <input type="hidden" id="lType" value="运动" />
     <div class="section-title">今日</div>
     ${todayLogs.length ? `<ul class="task-list">
       ${todayLogs.map(lifeRow).join('')}
@@ -43,6 +44,9 @@ export async function renderLife(view) {
   `;
 
   view.querySelector('#refreshLife').onclick = () => renderLife(view);
+  const lSeg = view.querySelector('#lTypeSeg');
+  lSeg.innerHTML = segHtml(TYPES, '运动', true);
+  bindSeg(lSeg, v => { view.querySelector('#lType').value = v; });
   view.querySelector('#lAdd').onclick = async () => {
     const type = view.querySelector('#lType').value;
     const value = view.querySelector('#lValue').value.trim();

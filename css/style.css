@@ -279,6 +279,14 @@ body {
 .mgmt-row .grow { flex: 1; }
 .color-dot { width: 18px; height: 18px; border-radius: 50%; flex-shrink: 0; }
 
+/* 分段选择卡（替代下拉框） */
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.seg-btn { border: 1px solid var(--line); background: var(--bg); color: var(--muted);
+  padding: 7px 12px; border-radius: 9px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.seg-btn.on { background: var(--primary); color: #fff; border-color: var(--primary); }
+.seg-block { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.seg-block .seg-btn { flex: 1 1 auto; text-align: center; }
+
 /* 假期条 */
 .dayoff-bar { display: flex; align-items: center; gap: 8px; justify-content: space-between;
   background: var(--card); border-radius: 12px; padding: 10px 14px; margin-bottom: 12px; box-shadow: var(--shadow); font-size: 13px; }

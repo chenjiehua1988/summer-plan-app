@@ -1,7 +1,7 @@
 // ============================================================
 // app.js：路由 / 导航 / 初始化
 // ============================================================
-import { state, toast, todayStr } from './supabase.js';
+import { state, toast, todayStr, segHtml, bindSeg } from './supabase.js';
 import * as auth from './auth.js';
 import * as db from './db.js';
 import { renderToday, renderTemplates } from './tasks.js';
@@ -119,6 +119,12 @@ function bindPointsModal() {
 // ---------- 鉴权 UI（家长/孩子） ----------
 function bindAuthUI() {
   const $ = id => document.getElementById(id);
+  // 家长角色选择卡
+  const roleSeg = $('loginRoleSeg');
+  if (roleSeg) {
+    roleSeg.innerHTML = segHtml([{value:'妈妈',label:'妈妈'},{value:'爸爸',label:'爸爸'}], '妈妈');
+    bindSeg(roleSeg, v => { $('loginRole').value = v; });
+  }
   // 家长 / 孩子 顶部切换
   const tabParent = $('tabParent'), tabChild = $('tabChild');
   const showParent = () => {
@@ -164,10 +170,12 @@ function bindAuthUI() {
     if (!fn) { authMsg('请填家庭名'); return; }
     const kids = await auth.fetchChildrenOf(fn);
     if (!kids.length) { authMsg('找不到该家庭或还没有孩子档案'); return; }
-    const sel = $('childPick');
-    sel.innerHTML = kids.map(k => `<option value="${k.id}">${k.name}（${k.grade_target || ''}）</option>`).join('');
-    sel.style.display = '';
+    const box = $('childPickBox');
+    box.innerHTML = segHtml(kids.map(k => ({ value: k.id, label: `${k.name}（${k.grade_target || ''}）` })), null, true);
+    box.style.display = '';
+    $('childPick').value = '';
     $('btnChildLogin').style.display = '';
+    bindSeg(box, v => { $('childPick').value = v; });
     authMsg('');
   };
   $('btnChildLogin').onclick = async () => {
@@ -316,12 +324,10 @@ function renderSetup(view) {
     <div class="card" id="childrenCard"></div>
     <div class="child-add">
       <input id="cName" type="text" placeholder="孩子姓名" class="grow" />
-      <select id="cGrade">
-        <option>准三年级</option><option>准四年级</option><option>准五年级</option>
-        <option>准六年级</option><option>准初一</option>
-      </select>
       <button class="btn-primary btn-sm" id="cAdd">添加</button>
     </div>
+    <div class="seg-block" id="cGradeSeg"></div>
+    <input type="hidden" id="cGrade" value="准六年级" />
 
     <div class="section-title">积分中心</div>
     <div id="pointsArea"></div>
@@ -402,6 +408,11 @@ function renderSetup(view) {
     try { await db.addShopItem({ name, cost_points: cost, icon: view.querySelector('#sIcon').value || '🎁' }); toast('已添加'); renderShopCard(); }
     catch (e) { toast('添加失败：' + e.message); }
   };
+
+  // 年级选择卡
+  const cgSeg = view.querySelector('#cGradeSeg');
+  cgSeg.innerHTML = segHtml(['准三年级','准四年级','准五年级','准六年级','准初一'], '准六年级', true);
+  bindSeg(cgSeg, v => { view.querySelector('#cGrade').value = v; });
 
   // 新建孩子
   view.querySelector('#cAdd').onclick = async () => {

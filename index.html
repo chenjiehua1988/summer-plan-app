@@ -62,10 +62,8 @@
         <input id="familyName" type="text" placeholder="家庭名（如：张家）" />
         <input id="password" type="password" placeholder="家庭密码（至少 4 位）" />
         <div class="role-pick">你是：
-          <select id="loginRole">
-            <option value="妈妈">妈妈</option>
-            <option value="爸爸">爸爸</option>
-          </select>
+          <div id="loginRoleSeg" class="seg"></div>
+          <input type="hidden" id="loginRole" value="妈妈" />
         </div>
         <div id="createExtra" class="create-extra" style="display:none">
           <p class="auth-hint">创建家庭时角色仅用于本次登录，家人登录时各自选。</p>
@@ -79,7 +77,8 @@
       <div id="childBox" style="display:none">
         <input id="childFamilyName" type="text" placeholder="家庭名" />
         <button id="btnLoadKids" class="btn-ghost">查找家庭</button>
-        <select id="childPick" style="display:none"></select>
+        <div id="childPickBox" style="display:none"></div>
+        <input type="hidden" id="childPick" />
         <button id="btnChildLogin" class="btn-primary" style="display:none">进入</button>
         <p class="auth-hint">孩子模式：只能打卡、拍照、申请兑换，不能改设置或验收。</p>
       </div>

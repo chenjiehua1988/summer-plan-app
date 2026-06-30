@@ -1,7 +1,7 @@
 // ============================================================
 // 任务模板管理 + 每日打卡视图（按周期 + 标签）
 // ============================================================
-import { state, todayStr, toast, actorName } from './supabase.js';
+import { state, todayStr, toast, actorName, segHtml, bindSeg } from './supabase.js';
 import * as db from './db.js';
 
 // 今日打卡视图：渲染当天 daily_records，按标签分组；支持假期标记与打卡拍照
@@ -216,13 +216,12 @@ export async function renderTemplates(container, childId) {
   container.innerHTML = `
     <div class="tmpl-add">
       <input id="tTitle" type="text" placeholder="任务名（如：口算100题）" class="grow" />
-      <select id="tSubject">
-        <option>语文</option><option>数学</option><option>英语</option><option>生活</option>
-      </select>
       <input id="tMin" type="number" placeholder="分钟" value="30" style="width:60px" />
       <input id="tPts" type="number" placeholder="积分" value="1" style="width:54px" />
       <button class="btn-primary btn-sm" id="tAdd">添加</button>
     </div>
+    <div class="seg-block" id="tSubjectSeg"></div>
+    <input type="hidden" id="tSubject" value="语文" />
     ${tags.length ? `<div class="tag-pick" id="tagPick">
       ${tags.map(t => `<label data-tid="${t.id}"><input type="checkbox" value="${t.id}">${t.name}</label>`).join('')}
     </div>` : ''}
@@ -240,6 +239,11 @@ export async function renderTemplates(container, childId) {
     };
     cb.onchange = sync; sync();
   });
+
+  // 科目选择卡
+  const subjSeg = container.querySelector('#tSubjectSeg');
+  subjSeg.innerHTML = segHtml(['语文','数学','英语','生活'], '语文', true);
+  bindSeg(subjSeg, v => { container.querySelector('#tSubject').value = v; });
 
   container.querySelector('#tAdd').onclick = async () => {
     const title = container.querySelector('#tTitle').value.trim();
