@@ -14,19 +14,22 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 });
 
 // 全局当前状态（在 app.js / 各模块间共享）
-// 不再用 Supabase Auth；登录态 = 本地存的 familyId + 角色名
+// 不再用 Supabase Auth；登录态 = 本地存的 familyId + 角色名 + 当前周期
 export const state = {
   family: null,         // families 行（含 id, name）
   currentRole: '妈妈',  // 当前操作角色：妈妈/爸爸
   children: [],         // 孩子列表
   currentChildId: null, // 当前选中的孩子
+  currentPlanId: null,  // 当前学习周期
+  plans: [],            // 周期列表
+  tags: [],             // 家庭标签库
   pendingTab: 'today'
 };
 
-// 本地持久化登录态（familyId + 角色），localStorage
+// 本地持久化登录态（familyId + 角色 + 当前周期），localStorage
 const LS_KEY = 'summer-plan-session';
-export function saveSession(familyId, role) {
-  localStorage.setItem(LS_KEY, JSON.stringify({ familyId, role }));
+export function saveSession(familyId, role, planId) {
+  localStorage.setItem(LS_KEY, JSON.stringify({ familyId, role, planId }));
 }
 export function loadSessionLocal() {
   try { return JSON.parse(localStorage.getItem(LS_KEY) || 'null'); }

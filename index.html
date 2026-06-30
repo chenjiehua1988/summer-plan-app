@@ -6,13 +6,13 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <meta name="apple-mobile-web-app-title" content="暑假计划" />
+  <meta name="apple-mobile-web-app-title" content="学习计划" />
   <meta name="theme-color" content="#4f7cff" />
   <link rel="manifest" href="./manifest.webmanifest" />
   <link rel="apple-touch-icon" href="./icons/icon-192.png" />
   <link rel="icon" href="./icons/icon-192.png" />
   <link rel="stylesheet" href="./css/style.css" />
-  <title>暑假学习生活计划</title>
+  <title>学习计划</title>
 </head>
 <body>
   <!-- 顶部栏 -->
@@ -20,7 +20,10 @@
     <div class="topbar-left">
       <select id="childSwitcher" class="child-switcher" aria-label="切换孩子"></select>
     </div>
-    <div class="topbar-title" id="topTitle">今日</div>
+    <div class="topbar-center">
+      <select id="planSwitcher" class="plan-switcher" aria-label="切换学习周期"></select>
+      <div id="planCountdown" class="plan-countdown"></div>
+    </div>
     <div class="topbar-right">
       <select id="roleSwitcher" class="role-switcher" aria-label="切换角色">
         <option value="妈妈">妈妈</option>

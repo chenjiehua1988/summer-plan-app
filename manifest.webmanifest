@@ -1,7 +1,7 @@
 {
-  "name": "暑假学习生活计划",
-  "short_name": "暑假计划",
-  "description": "小学生暑假学习与生活打卡、验收、积分、统计",
+  "name": "学习计划",
+  "short_name": "学习计划",
+  "description": "家庭学习管理：周期任务打卡、验收、积分、统计",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

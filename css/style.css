@@ -31,14 +31,22 @@ body {
 .topbar {
   position: fixed; top: var(--safe-top); left: 0; right: 0; height: 52px;
   display: flex; align-items: center; justify-content: space-between;
-  padding: 0 12px; background: var(--card); box-shadow: 0 1px 0 var(--line);
-  z-index: 50;
+  padding: 0 10px; background: var(--card); box-shadow: 0 1px 0 var(--line);
+  z-index: 50; gap: 8px;
 }
+.topbar-left { flex: 0 0 auto; min-width: 0; }
+.topbar-center { flex: 1 1 auto; min-width: 0; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.topbar-right { flex: 0 0 auto; display: flex; align-items: center; }
 .topbar-title { font-weight: 600; font-size: 16px; }
 .child-switcher {
   border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px;
-  background: var(--bg); font-size: 14px; max-width: 46vw;
+  background: var(--bg); font-size: 13px; max-width: 26vw;
 }
+.plan-switcher {
+  border: none; background: transparent; font-size: 14px; font-weight: 700;
+  color: var(--text); max-width: 40vw; text-align: center;
+}
+.plan-countdown { font-size: 11px; color: var(--primary); font-weight: 600; line-height: 1.2; }
 .chip {
   border: none; background: var(--bg); border-radius: 14px;
   padding: 6px 10px; font-size: 14px; font-weight: 600; color: var(--primary);
@@ -224,3 +232,43 @@ body {
 .role-pick select { flex: 1; padding: 9px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; }
 .auth-hint { color: var(--muted); font-size: 12px; margin-top: 10px; line-height: 1.5; }
 .auth-card .btn-primary { width: 100%; margin-bottom: 8px; }
+
+/* 标签 */
+.tag-chip {
+  display: inline-flex; align-items: center; gap: 4px; font-size: 11px;
+  padding: 2px 8px; border-radius: 8px; color: #fff; font-weight: 600;
+}
+.tag-pick { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.tag-pick label { display: inline-flex; align-items: center; gap: 3px; font-size: 12px;
+  padding: 4px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); }
+.tag-pick input { margin: 0; }
+.tag-pick label.on { color: #fff; border-color: transparent; }
+.task-group-head { font-size: 13px; font-weight: 700; color: var(--muted); margin: 14px 0 6px; display: flex; align-items: center; gap: 6px; }
+
+/* 兑换商店 */
+.shop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.shop-item { background: var(--card); border-radius: 14px; padding: 14px; text-align: center; box-shadow: var(--shadow); }
+.shop-icon { font-size: 28px; }
+.shop-name { font-size: 13px; font-weight: 600; margin: 4px 0; }
+.shop-cost { font-size: 12px; color: var(--warn); font-weight: 700; }
+.shop-btn { margin-top: 8px; width: 100%; }
+
+/* 周期卡片（历史对比） */
+.plan-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.plan-card { background: var(--card); border-radius: 12px; padding: 12px; box-shadow: var(--shadow); }
+.plan-card .pc-name { font-weight: 700; font-size: 13px; }
+.plan-card .pc-rate { font-size: 22px; font-weight: 800; color: var(--primary); margin: 4px 0; }
+.plan-card .pc-meta { font-size: 11px; color: var(--muted); }
+
+/* 倒计时进度条 */
+.countdown-bar { background: var(--card); border-radius: 12px; padding: 14px; box-shadow: var(--shadow); margin-bottom: 12px; }
+.countdown-bar .cb-row { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px; }
+.countdown-bar .cb-track { height: 8px; background: var(--bg); border-radius: 4px; overflow: hidden; }
+.countdown-bar .cb-fill { height: 100%; background: linear-gradient(90deg, var(--primary), #6a5cff); }
+
+/* 管理行 */
+.mgmt-row { display: flex; align-items: center; gap: 6px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.mgmt-row:last-child { border-bottom: none; }
+.mgmt-row input, .mgmt-row select { padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
+.mgmt-row .grow { flex: 1; }
+.color-dot { width: 18px; height: 18px; border-radius: 50%; flex-shrink: 0; }

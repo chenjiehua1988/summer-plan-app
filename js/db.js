@@ -92,46 +92,136 @@ export async function removeChild(id) {
   state.children = state.children.filter(c => c.id !== id);
 }
 
-// ---------- 任务模板 ----------
-export async function fetchTemplates(childId) {
+// ---------- 任务模板（绑「周期+孩子」） ----------
+// fetchTemplates：取某周期某孩子的模板；带 tagIds
+export async function fetchTemplates(planId, childId) {
   let q = supabase.from('task_templates').select('*').eq('family_id', state.family.id);
+  if (planId) q = q.eq('plan_id', planId);
   if (childId) q = q.eq('child_id', childId);
   q = q.order('subject').order('created_at');
   const { data, error } = await q;
   if (error) throw error;
-  return data || [];
+  // 附带 tagIds
+  const list = data || [];
+  if (list.length) {
+    const { data: tt } = await supabase
+      .from('task_tags').select('template_id, tag_id')
+      .in('template_id', list.map(t => t.id));
+    const map = {};
+    (tt || []).forEach(r => (map[r.template_id] = map[r.template_id] || []).push(r.tag_id));
+    list.forEach(t => t.tagIds = map[t.id] || []);
+  }
+  return list;
 }
 export async function addTemplate(t) {
-  const row = { family_id: state.family.id, child_id: t.child_id, subject: t.subject,
-    title: t.title, default_minutes: t.default_minutes ?? 30, points: t.points ?? 1,
-    recurrence: t.recurrence ?? 'daily', active: t.active ?? true };
+  const row = { family_id: state.family.id, plan_id: t.plan_id, child_id: t.child_id,
+    subject: t.subject, title: t.title, default_minutes: t.default_minutes ?? 30,
+    points: t.points ?? 1, recurrence: t.recurrence ?? 'daily', active: t.active ?? true };
   const { data, error } = await supabase.from('task_templates').insert(row).select().single();
   if (error) throw error;
+  // 关联标签
+  if (t.tagIds && t.tagIds.length) {
+    await supabase.from('task_tags').insert(t.tagIds.map(tid => ({ template_id: data.id, tag_id: tid })));
+  }
+  data.tagIds = t.tagIds || [];
   return data;
 }
 export async function deleteTemplate(id) {
   const { error } = await supabase.from('task_templates').delete().eq('id', id);
   if (error) throw error;
 }
+// 复制某旧周期某孩子的模板到新周期（用于"从上周期复制"）
+export async function copyTemplates(fromPlanId, toPlanId, childId) {
+  const src = await fetchTemplates(fromPlanId, childId);
+  if (!src.length) return 0;
+  const rows = src.map(t => ({
+    family_id: state.family.id, plan_id: toPlanId, child_id: childId,
+    subject: t.subject, title: t.title, default_minutes: t.default_minutes,
+    points: t.points, recurrence: t.recurrence, active: t.active
+  }));
+  const { data, error } = await supabase.from('task_templates').insert(rows).select();
+  if (error) throw error;
+  // 复制标签关联
+  const ttRows = [];
+  (data || []).forEach((nt, i) => {
+    (src[i].tagIds || []).forEach(tid => ttRows.push({ template_id: nt.id, tag_id: tid }));
+  });
+  if (ttRows.length) await supabase.from('task_tags').insert(ttRows);
+  return (data || []).length;
+}
+
+// ---------- 学习周期 ----------
+export async function fetchPlans() {
+  const { data, error } = await supabase
+    .from('plans').select('*').eq('family_id', state.family.id).order('sort').order('created_at');
+  if (error) throw error;
+  return data || [];
+}
+export async function addPlan(p) {
+  const row = { family_id: state.family.id, name: p.name, type: p.type || '日常',
+    start_date: p.start_date || null, end_date: p.end_date || null,
+    status: 'active', sort: p.sort ?? 0 };
+  const { data, error } = await supabase.from('plans').insert(row).select().single();
+  if (error) throw error;
+  return data;
+}
+export async function updatePlan(id, patch) {
+  const { data, error } = await supabase.from('plans').update(patch).eq('id', id).select().single();
+  if (error) throw error;
+  return data;
+}
+export async function deletePlan(id) {
+  const { error } = await supabase.from('plans').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// ---------- 标签 ----------
+export async function fetchTags() {
+  const { data, error } = await supabase
+    .from('tags').select('*').eq('family_id', state.family.id).order('sort').order('created_at');
+  if (error) throw error;
+  return data || [];
+}
+export async function addTag(name, color) {
+  const { data, error } = await supabase.from('tags')
+    .insert({ family_id: state.family.id, name, color: color || '#4f7cff' }).select().single();
+  if (error) throw error;
+  return data;
+}
+export async function updateTag(id, patch) {
+  const { data, error } = await supabase.from('tags').update(patch).eq('id', id).select().single();
+  if (error) throw error;
+  return data;
+}
+export async function deleteTag(id) {
+  const { error } = await supabase.from('tags').delete().eq('id', id);
+  if (error) throw error;
+}
 
 // ---------- 每日记录 ----------
-// 拉取某孩子某天的记录；若当天无记录，从 active 模板自动生成
-export async function ensureDailyRecords(childId, date) {
-  const { data: existing, error } = await supabase
-    .from('daily_records').select('*')
-    .eq('child_id', childId).eq('date', date);
+// 拉取某孩子某天的记录；若当天无记录，从「当前周期+孩子」active 模板自动生成
+export async function ensureDailyRecords(childId, date, planId) {
+  const pid = planId || state.currentPlanId;
+  let q = supabase.from('daily_records').select('*').eq('child_id', childId).eq('date', date);
+  if (pid) q = q.eq('plan_id', pid); else q = q.is('plan_id', null);
+  const { data: existing, error } = await q;
   if (error) throw error;
   if (existing && existing.length) {
     await cacheRecords(existing);
     return existing;
   }
-  // 生成
-  const templates = await fetchTemplates(childId);
+  // 生成：必须有当前周期
+  if (!pid) return [];
+  const templates = await fetchTemplates(pid, childId);
   const active = templates.filter(t => t.active);
   if (!active.length) return [];
+  // 取标签名映射，写入 tags 快照
+  const allTags = await fetchTags();
+  const tagName = id => (allTags.find(tg => tg.id === id) || {}).name;
   const rows = active.map(t => ({
-    family_id: state.family.id, child_id: childId, task_id: t.id, date,
-    subject: t.subject, title: t.title, points: t.points, status: 'pending'
+    family_id: state.family.id, plan_id: pid, child_id: childId, task_id: t.id, date,
+    subject: t.subject, title: t.title, points: t.points, status: 'pending',
+    tags: (t.tagIds || []).map(tagName).filter(Boolean)
   }));
   const { data, error: ie } = await supabase.from('daily_records').insert(rows).select();
   if (ie) throw ie;
@@ -144,6 +234,13 @@ export async function fetchRecordsRange(childId, fromDate, toDate) {
   let q = supabase.from('daily_records').select('*').eq('child_id', childId)
     .gte('date', fromDate).lte('date', toDate).order('date');
   const { data, error } = await q;
+  if (error) throw error;
+  return data || [];
+}
+// 拉取某周期某孩子全部记录（统计用）
+export async function fetchRecordsByPlan(planId, childId) {
+  const { data, error } = await supabase.from('daily_records').select('*')
+    .eq('plan_id', planId).eq('child_id', childId).order('date');
   if (error) throw error;
   return data || [];
 }
@@ -213,19 +310,45 @@ export async function fetchRewards(childId) {
   if (error) throw error;
   return data || [];
 }
-export async function redeemReward(childId, name, costPoints) {
+export async function redeemReward(childId, shopItem) {
+  // shopItem: { id, name, cost_points }
   // 扣减积分：写一条负数流水 + 一条奖励记录
   const { error: e1 } = await supabase.from('point_ledger').insert({
     family_id: state.family.id, child_id: childId,
-    delta: -costPoints, reason: '兑换奖励：' + name, created_by: state.currentRole
+    delta: -shopItem.cost_points, reason: '兑换奖励：' + shopItem.name, created_by: state.currentRole
   });
   if (e1) throw e1;
   const { data, error: e2 } = await supabase.from('rewards').insert({
-    family_id: state.family.id, child_id: childId,
-    name, cost_points: costPoints, redeemed_by: state.currentRole
+    family_id: state.family.id, child_id: childId, shop_id: shopItem.id || null,
+    name: shopItem.name, cost_points: shopItem.cost_points, redeemed_by: state.currentRole
   }).select().single();
   if (e2) throw e2;
   return data;
+}
+
+// ---------- 兑换商店目录 ----------
+export async function fetchShop() {
+  const { data, error } = await supabase.from('reward_shop').select('*')
+    .eq('family_id', state.family.id).order('sort').order('created_at');
+  if (error) throw error;
+  return data || [];
+}
+export async function addShopItem(item) {
+  const row = { family_id: state.family.id, name: item.name,
+    cost_points: item.cost_points, icon: item.icon || '🎁',
+    active: item.active ?? true, sort: item.sort ?? 0 };
+  const { data, error } = await supabase.from('reward_shop').insert(row).select().single();
+  if (error) throw error;
+  return data;
+}
+export async function updateShopItem(id, patch) {
+  const { data, error } = await supabase.from('reward_shop').update(patch).eq('id', id).select().single();
+  if (error) throw error;
+  return data;
+}
+export async function deleteShopItem(id) {
+  const { error } = await supabase.from('reward_shop').delete().eq('id', id);
+  if (error) throw error;
 }
 
 // ---------- 离线队列回放 ----------

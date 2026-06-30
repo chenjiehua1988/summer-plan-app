@@ -58,13 +58,21 @@ export async function restoreSession() {
   if (error || !fam) { clearSession(); return null; }
   state.family = fam;
   state.currentRole = s.role || '妈妈';
+  state.currentPlanId = s.planId || null;
   return fam;
 }
 
 export function switchRole(role) {
   state.currentRole = role;
   const s = loadSessionLocal();
-  if (s) saveSession(s.familyId, role);
+  if (s) saveSession(s.familyId, role, s.planId);
+}
+
+// 切换当前学习周期（持久化）
+export function switchPlan(planId) {
+  state.currentPlanId = planId;
+  const s = loadSessionLocal();
+  if (s) saveSession(s.familyId, s.role, planId);
 }
 
 export async function logout() {
@@ -73,4 +81,7 @@ export async function logout() {
   state.currentRole = '妈妈';
   state.children = [];
   state.currentChildId = null;
+  state.currentPlanId = null;
+  state.plans = [];
+  state.tags = [];
 }

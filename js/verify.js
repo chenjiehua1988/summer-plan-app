@@ -7,10 +7,11 @@ import * as db from './db.js';
 export async function renderVerify(view) {
   const childId = state.currentChildId;
   if (!childId) { view.innerHTML = `<div class="empty">请先添加孩子。</div>`; return; }
+  if (!state.currentPlanId) { view.innerHTML = `<div class="empty">请先选择一个学习周期。</div>`; return; }
   const date = todayStr();
   view.innerHTML = `<div class="loading">加载中…</div>`;
   let records = [];
-  try { records = await db.ensureDailyRecords(childId, date); }
+  try { records = await db.ensureDailyRecords(childId, date, state.currentPlanId); }
   catch (e) { records = await db.getCachedRecords(childId, date); }
 
   const pending = records.filter(r => r.status === 'done');

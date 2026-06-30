@@ -1,7 +1,7 @@
 // ============================================================
 // app.js：路由 / 导航 / 初始化
 // ============================================================
-import { state, toast } from './supabase.js';
+import { state, toast, todayStr } from './supabase.js';
 import * as auth from './auth.js';
 import * as db from './db.js';
 import { renderToday, renderTemplates } from './tasks.js';
@@ -13,7 +13,6 @@ import { renderPoints, refreshPointBadge } from './points.js';
 const view = document.getElementById('view');
 const authScreen = document.getElementById('authScreen');
 
-// 暴露给其他模块（如 verify.js 验收后刷新顶栏积分）
 window.refreshPointBadge = refreshPointBadge;
 
 let realtimeChannel = null;
@@ -25,9 +24,9 @@ async function boot() {
   bindTabs();
   bindChildSwitcher();
   bindRoleSwitcher();
+  bindPlanSwitcher();
   window.addEventListener('online', () => { toast('已联网，同步中…'); db.flushQueue(); refreshCurrent(); });
 
-  // 从本地 session 恢复
   const fam = await auth.restoreSession();
   if (fam) await maybeEnterApp();
   else showAuth();
@@ -40,12 +39,25 @@ async function maybeEnterApp() {
   if (!state.currentChildId && state.children.length) {
     state.currentChildId = state.children[0].id;
   }
+  // 加载周期与标签
+  try {
+    state.plans = await db.fetchPlans();
+    state.tags = await db.fetchTags();
+  } catch (e) { console.warn('load plans/tags', e); }
+  // 恢复或选第一个 active 周期
+  if (state.currentPlanId && !state.plans.find(p => p.id === state.currentPlanId)) {
+    state.currentPlanId = null;
+  }
+  if (!state.currentPlanId) {
+    const firstActive = state.plans.find(p => p.status === 'active') || state.plans[0];
+    if (firstActive) { state.currentPlanId = firstActive.id; auth.switchPlan(firstActive.id); }
+  }
   fillChildSwitcher();
+  fillPlanSwitcher();
   authScreen.style.display = 'none';
   switchTab(state.pendingTab || 'today');
 }
 
-// ---------- Service Worker ----------
 function registerSW() {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(e => console.warn('SW reg fail', e));
@@ -81,11 +93,9 @@ function bindAuthUI() {
   };
 }
 function authMsg(m) { document.getElementById('authMsg').textContent = m; }
-function showAuth() {
-  authScreen.style.display = 'flex';
-}
+function showAuth() { authScreen.style.display = 'flex'; }
 
-// ---------- 角色切换（妈妈/爸爸） ----------
+// ---------- 角色切换 ----------
 function bindRoleSwitcher() {
   const sel = document.getElementById('roleSwitcher');
   if (!sel) return;
@@ -96,19 +106,48 @@ function syncRoleSwitcher() {
   if (sel) sel.value = state.currentRole;
 }
 
+// ---------- 周期切换 ----------
+function bindPlanSwitcher() {
+  const sel = document.getElementById('planSwitcher');
+  if (!sel) return;
+  sel.onchange = () => {
+    auth.switchPlan(sel.value || null);
+    updatePlanCountdown();
+    refreshCurrent();
+  };
+}
+function fillPlanSwitcher() {
+  const sel = document.getElementById('planSwitcher');
+  if (!sel) return;
+  const opts = state.plans.map(p =>
+    `<option value="${p.id}" ${p.status === 'archived' ? 'data-arch':''}>${p.name}${p.status === 'archived' ? '(归档)' : ''}</option>`).join('');
+  sel.innerHTML = `<option value="">(无周期)</option>` + opts;
+  if (state.currentPlanId) sel.value = state.currentPlanId;
+  updatePlanCountdown();
+}
+function updatePlanCountdown() {
+  const el = document.getElementById('planCountdown');
+  if (!el) return;
+  const p = state.plans.find(x => x.id === state.currentPlanId);
+  if (!p || !p.end_date) { el.textContent = p ? p.type : ''; return; }
+  const today = todayStr();
+  const end = p.end_date;
+  const days = Math.ceil((new Date(end) - new Date(today)) / 86400000);
+  if (days > 0) el.textContent = `剩 ${days} 天`;
+  else if (days === 0) el.textContent = '今天截止';
+  else el.textContent = '已结束';
+}
+
 // ---------- 底部 Tab ----------
 function bindTabs() {
   document.querySelectorAll('.tab').forEach(t => {
     t.onclick = () => switchTab(t.dataset.tab);
   });
 }
-
 function switchTab(tab) {
   state.pendingTab = tab;
   document.querySelectorAll('.tab').forEach(t =>
     t.classList.toggle('active', t.dataset.tab === tab));
-  const titles = { today:'今日', verify:'验收', stats:'统计', life:'生活', setup:'设置' };
-  document.getElementById('topTitle').textContent = titles[tab] || '';
   refreshCurrent();
 }
 
@@ -138,17 +177,15 @@ function fillChildSwitcher() {
     `<option value="${c.id}">${c.name}（${c.grade_target || ''}）</option>`).join('');
   if (state.currentChildId) sel.value = state.currentChildId;
 }
-
 function subscribeRealtime() {
   if (realtimeChannel) { realtimeChannel.unsubscribe(); realtimeChannel = null; }
   if (!state.currentChildId) return;
-  realtimeChannel = db.subscribeRecords(state.currentChildId, () => {
-    refreshCurrent();
-  });
+  realtimeChannel = db.subscribeRecords(state.currentChildId, () => { refreshCurrent(); });
 }
 
 // ---------- 设置页 ----------
 function renderSetup(view) {
+  const plan = state.plans.find(p => p.id === state.currentPlanId);
   view.innerHTML = `
     <div class="page-head"><div><div class="date-label">设置</div></div></div>
 
@@ -156,18 +193,45 @@ function renderSetup(view) {
     <div class="card">
       <div class="row-line"><span>家庭名称</span><span>${state.family?.name || '—'}</span></div>
       <div class="row-line"><span>当前角色</span>
-        <select id="roleSwitcher2">
-          <option value="妈妈">妈妈</option>
-          <option value="爸爸">爸爸</option>
-        </select>
+        <select id="roleSwitcher2"><option value="妈妈">妈妈</option><option value="爸爸">爸爸</option></select>
       </div>
-      <div class="row-hint">爸妈共用一个家庭密码，这里切换当前操作人（验收/打卡会记录是谁）。</div>
+      <div class="row-hint">爸妈共用一个家庭密码，这里切换当前操作人。</div>
+    </div>
+
+    <div class="section-title">学习周期</div>
+    <div class="card" id="plansCard"></div>
+    <div class="child-add">
+      <input id="pName" type="text" placeholder="周期名（如 2026暑假）" class="grow" />
+      <select id="pType">
+        <option>暑假</option><option>寒假</option><option>KET备考</option>
+        <option>日常</option><option>其他</option>
+      </select>
+      <input id="pStart" type="date" style="width:118px" />
+      <input id="pEnd" type="date" style="width:118px" />
+      <button class="btn-primary btn-sm" id="pAdd">新建</button>
+    </div>
+
+    <div class="section-title">标签管理</div>
+    <div class="card" id="tagsCard"></div>
+    <div class="child-add">
+      <input id="tName" type="text" placeholder="标签名（如 预习）" class="grow" />
+      <input id="tColor" type="color" style="width:40px;height:34px;padding:2px" value="#2bb673" />
+      <button class="btn-primary btn-sm" id="tAdd">添加</button>
+    </div>
+
+    <div class="section-title">兑换商店目录</div>
+    <div class="card" id="shopCard"></div>
+    <div class="child-add">
+      <input id="sIcon" type="text" placeholder="图标" style="width:48px" value="🎁" />
+      <input id="sName" type="text" placeholder="奖励名（如 看一集动画）" class="grow" />
+      <input id="sCost" type="number" placeholder="积分" style="width:70px" />
+      <button class="btn-primary btn-sm" id="sAdd">添加</button>
     </div>
 
     <div class="section-title">孩子档案</div>
     <div class="card" id="childrenCard"></div>
     <div class="child-add">
-      <input id="cName" type="text" placeholder="孩子姓名" />
+      <input id="cName" type="text" placeholder="孩子姓名" class="grow" />
       <select id="cGrade">
         <option>准三年级</option><option>准四年级</option><option>准五年级</option>
         <option>准六年级</option><option>准初一</option>
@@ -178,29 +242,76 @@ function renderSetup(view) {
     <div class="section-title">积分中心</div>
     <div id="pointsArea"></div>
 
-    <div class="section-title">任务模板（当前孩子）</div>
+    <div class="section-title">任务清单（当前周期 · 当前孩子）</div>
     <div id="tmplArea"></div>
 
     <div class="section-title">账号</div>
-    <div class="card">
-      <button class="btn-ghost btn-sm" id="btnLogout">退出登录</button>
-    </div>
+    <div class="card"><button class="btn-ghost btn-sm" id="btnLogout">退出登录</button></div>
   `;
 
-  // 角色切换
   const rs2 = view.querySelector('#roleSwitcher2');
-  if (rs2) {
-    rs2.value = state.currentRole;
-    rs2.onchange = () => { auth.switchRole(rs2.value); toast('已切换为 ' + rs2.value); };
-  }
+  if (rs2) { rs2.value = state.currentRole; rs2.onchange = () => { auth.switchRole(rs2.value); toast('已切换为 ' + rs2.value); }; }
 
+  renderPlansCard();
+  renderTagsCard();
+  renderShopCard();
   renderChildrenCard();
   const childId = state.currentChildId;
-  if (childId) {
+  if (childId && state.currentPlanId) {
     renderPoints(document.getElementById('pointsArea'), childId);
     renderTemplates(document.getElementById('tmplArea'), childId);
+  } else {
+    document.getElementById('tmplArea').innerHTML =
+      `<div class="empty">${!state.currentPlanId ? '请先在上方选择/创建一个学习周期。' : '请先添加孩子。'}</div>`;
   }
 
+  // 新建周期
+  view.querySelector('#pAdd').onclick = async () => {
+    const name = view.querySelector('#pName').value.trim();
+    if (!name) { toast('请填周期名'); return; }
+    try {
+      const p = await db.addPlan({
+        name, type: view.querySelector('#pType').value,
+        start_date: view.querySelector('#pStart').value || null,
+        end_date: view.querySelector('#pEnd').value || null
+      });
+      state.plans.push(p);
+      auth.switchPlan(p.id);
+      fillPlanSwitcher();
+      // 询问是否从旧周期复制
+      const oldPlans = state.plans.filter(x => x.id !== p.id);
+      if (oldPlans.length && state.currentChildId && confirm('是否从某个旧周期复制当前孩子的任务清单？')) {
+        const opts = oldPlans.map((o, i) => `${i + 1}. ${o.name}`).join('\n');
+        const idx = prompt('选择要复制的旧周期编号：\n' + opts);
+        const src = oldPlans[(+idx) - 1];
+        if (src) {
+          const n = await db.copyTemplates(src.id, p.id, state.currentChildId);
+          toast(`已复制 ${n} 个任务`);
+        }
+      }
+      renderPlansCard();
+      renderTemplates(document.getElementById('tmplArea'), state.currentChildId);
+    } catch (e) { toast('新建失败：' + e.message); }
+  };
+
+  // 新建标签
+  view.querySelector('#tAdd').onclick = async () => {
+    const name = view.querySelector('#tName').value.trim();
+    if (!name) { toast('请填标签名'); return; }
+    try { state.tags.push(await db.addTag(name, view.querySelector('#tColor').value)); toast('已添加'); renderTagsCard(); }
+    catch (e) { toast('添加失败：' + e.message); }
+  };
+
+  // 新建奖励项
+  view.querySelector('#sAdd').onclick = async () => {
+    const name = view.querySelector('#sName').value.trim();
+    const cost = +view.querySelector('#sCost').value;
+    if (!name || !cost) { toast('请填名称和积分'); return; }
+    try { await db.addShopItem({ name, cost_points: cost, icon: view.querySelector('#sIcon').value || '🎁' }); toast('已添加'); renderShopCard(); }
+    catch (e) { toast('添加失败：' + e.message); }
+  };
+
+  // 新建孩子
   view.querySelector('#cAdd').onclick = async () => {
     const name = view.querySelector('#cName').value.trim();
     if (!name) { toast('请输入姓名'); return; }
@@ -211,12 +322,97 @@ function renderSetup(view) {
       renderChildrenCard();
     } catch (e) { toast('添加失败：' + e.message); }
   };
+
   view.querySelector('#btnLogout').onclick = async () => {
     if (!confirm('确定退出登录？')) return;
     await auth.logout();
-    fillChildSwitcher();
+    fillChildSwitcher(); fillPlanSwitcher();
     showAuth();
   };
+}
+
+function renderPlansCard() {
+  const card = document.getElementById('plansCard');
+  if (!card) return;
+  card.innerHTML = state.plans.length
+    ? state.plans.map(p => `
+      <div class="mgmt-row">
+        <span class="grow">${p.name} <small style="color:var(--muted)">${p.type} ${p.start_date||''}~${p.end_date||''} ${p.status==='archived'?'·归档':''}</small></span>
+        <button class="btn-ghost btn-sm" data-archive="${p.id}">${p.status==='archived'?'恢复':'归档'}</button>
+        <button class="btn-ghost btn-sm" data-del-plan="${p.id}">删除</button>
+      </div>`).join('')
+    : `<div class="empty">还没有学习周期。</div>`;
+  card.querySelectorAll('[data-archive]').forEach(b => {
+    b.onclick = async () => {
+      const p = state.plans.find(x => x.id === b.dataset.archive);
+      const ns = p.status === 'archived' ? 'active' : 'archived';
+      try { await db.updatePlan(p.id, { status: ns }); p.status = ns; renderPlansCard(); toast(ns === 'archived' ? '已归档' : '已恢复'); }
+      catch (e) { toast('操作失败：' + e.message); }
+    };
+  });
+  card.querySelectorAll('[data-del-plan]').forEach(b => {
+    b.onclick = async () => {
+      if (!confirm('删除该周期及其所有任务模板和打卡记录？')) return;
+      try { await db.deletePlan(b.dataset.delPlan); state.plans = state.plans.filter(x => x.id !== b.dataset.delPlan); if (state.currentPlanId === b.dataset.delPlan) { state.currentPlanId = null; auth.switchPlan(null); } fillPlanSwitcher(); renderPlansCard(); toast('已删除'); }
+      catch (e) { toast('删除失败：' + e.message); }
+    };
+  });
+}
+
+function renderTagsCard() {
+  const card = document.getElementById('tagsCard');
+  if (!card) return;
+  card.innerHTML = state.tags.length
+    ? state.tags.map(t => `
+      <div class="mgmt-row">
+        <span class="color-dot" style="background:${t.color}"></span>
+        <span class="grow">${t.name}</span>
+        <input type="color" value="${t.color}" data-tag-color="${t.id}" style="width:34px;height:28px;padding:2px" />
+        <button class="btn-ghost btn-sm" data-del-tag="${t.id}">删除</button>
+      </div>`).join('')
+    : `<div class="empty">还没有标签。</div>`;
+  card.querySelectorAll('[data-del-tag]').forEach(b => {
+    b.onclick = async () => {
+      if (!confirm('删除该标签？任务上的该标签关联也会删除。')) return;
+      try { await db.deleteTag(b.dataset.delTag); state.tags = state.tags.filter(x => x.id !== b.dataset.delTag); renderTagsCard(); toast('已删除'); }
+      catch (e) { toast('删除失败：' + e.message); }
+    };
+  });
+  card.querySelectorAll('[data-tag-color]').forEach(inp => {
+    inp.onchange = async () => {
+      try { await db.updateTag(inp.dataset.tagColor, { color: inp.value }); const t = state.tags.find(x => x.id === inp.dataset.tagColor); if (t) t.color = inp.value; renderTagsCard(); }
+      catch (e) { toast('更新失败：' + e.message); }
+    };
+  });
+}
+
+function renderShopCard() {
+  const card = document.getElementById('shopCard');
+  if (!card) return;
+  db.fetchShop().then(items => {
+    card.innerHTML = items.length
+      ? items.map(s => `
+        <div class="mgmt-row">
+          <span style="font-size:18px">${s.icon||'🎁'}</span>
+          <span class="grow">${s.name} <small style="color:var(--warn)">${s.cost_points}分</small></span>
+          <button class="btn-ghost btn-sm" data-toggle-shop="${s.id}">${s.active?'下架':'上架'}</button>
+          <button class="btn-ghost btn-sm" data-del-shop="${s.id}">删除</button>
+        </div>`).join('')
+      : `<div class="empty">还没有奖励项。</div>`;
+    card.querySelectorAll('[data-toggle-shop]').forEach(b => {
+      b.onclick = async () => {
+        const s = items.find(x => x.id === b.dataset.toggleShop);
+        try { await db.updateShopItem(s.id, { active: !s.active }); renderShopCard(); }
+        catch (e) { toast('操作失败：' + e.message); }
+      };
+    });
+    card.querySelectorAll('[data-del-shop]').forEach(b => {
+      b.onclick = async () => {
+        try { await db.deleteShopItem(b.dataset.delShop); renderShopCard(); toast('已删除'); }
+        catch (e) { toast('删除失败：' + e.message); }
+      };
+    });
+  }).catch(e => { card.innerHTML = `<div class="empty">加载失败</div>`; });
 }
 
 function renderChildrenCard() {
