@@ -130,6 +130,21 @@ export async function deleteTemplate(id) {
   const { error } = await supabase.from('task_templates').delete().eq('id', id);
   if (error) throw error;
 }
+// 改任务：patch = {title, subject, default_minutes, points, active}；tagIds 若提供则重置标签
+export async function updateTemplate(id, patch, tagIds) {
+  const { data, error } = await supabase
+    .from('task_templates').update(patch).eq('id', id).select().single();
+  if (error) throw error;
+  if (tagIds) {
+    // 重置标签：先删全部，再加新的
+    await supabase.from('task_tags').delete().eq('template_id', id);
+    if (tagIds.length) {
+      await supabase.from('task_tags').insert(tagIds.map(tid => ({ template_id: id, tag_id: tid })));
+    }
+    data.tagIds = tagIds;
+  }
+  return data;
+}
 // 复制某旧周期某孩子的模板到新周期（用于"从上周期复制"）
 export async function copyTemplates(fromPlanId, toPlanId, childId) {
   const src = await fetchTemplates(fromPlanId, childId);

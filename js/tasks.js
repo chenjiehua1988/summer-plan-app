@@ -266,6 +266,41 @@ export async function renderTemplates(container, childId) {
       catch (e) { toast('删除失败：' + e.message); }
     };
   });
+  container.querySelectorAll('[data-edit]').forEach(b => {
+    b.onclick = () => openEditTemplate(b.dataset.edit, templates, tags, container, childId);
+  });
+}
+
+// 编辑任务：用 prompt 逐项改，标签用简易多选
+function openEditTemplate(id, templates, tags, container, childId) {
+  const t = templates.find(x => x.id === id);
+  if (!t) return;
+  const title = prompt('任务名', t.title);
+  if (title === null) return;
+  const min = prompt('用时（分钟）', t.default_minutes);
+  if (min === null) return;
+  const pts = prompt('积分', t.points);
+  if (pts === null) return;
+  const subj = prompt('科目（语文/数学/英语/生活）', t.subject);
+  if (subj === null) return;
+  // 标签多选：列出标签，已选的带[√]
+  const cur = t.tagIds || [];
+  const tagStr = tags.map(tg => (cur.includes(tg.id) ? '[√]' : '[ ]') + tg.name).join('  ');
+  const tagInput = prompt('选择标签（输入标签名，多个用逗号分隔；留空=不改变）\n' + tagStr, cur.map(id => (tags.find(x=>x.id===id)||{}).name).join(','));
+  const active = confirm(t.active === false ? '当前已停用，点确定启用，取消保持停用' : '点确定保持启用，取消则停用');
+  const patch = { title: title.trim() || t.title, default_minutes: +min || t.default_minutes,
+    points: +pts || t.points, subject: ['语文','数学','英语','生活'].includes(subj) ? subj : t.subject,
+    active: active ? true : (t.active === false ? false : true) };
+  // 解析标签
+  let newTagIds;
+  if (tagInput !== null) {
+    const names = tagInput.split(/[,，、\s]+/).map(s=>s.trim()).filter(Boolean);
+    newTagIds = tags.filter(tg => names.includes(tg.name)).map(tg => tg.id);
+  }
+  db.updateTemplate(id, patch, tagInput === null ? undefined : newTagIds).then(() => {
+    toast('已保存');
+    renderTemplates(container, childId);
+  }).catch(e => toast('保存失败：' + e.message));
 }
 
 function tmplRow(t, tags) {
@@ -273,12 +308,14 @@ function tmplRow(t, tags) {
     const tg = tags.find(x => x.id === id);
     return tg ? `<span class="tag-chip" style="background:${tg.color}">${tg.name}</span>` : '';
   }).join('');
+  const activeTag = t.active === false ? '<span class="badge badge-skip">已停用</span>' : '';
   return `
     <div class="tmpl-row">
       <div class="tmpl-name">
-        ${t.title} <small>${t.default_minutes}分·${t.points}分</small>
+        ${t.title} <small>${t.default_minutes}分·${t.points}分</small> ${activeTag}
         <div style="margin-top:3px">${tagHtml}<span class="subj subj-${t.subject}" style="margin-left:4px">${t.subject}</span></div>
       </div>
+      <button class="btn-ghost btn-sm" data-edit="${t.id}">改</button>
       <button class="btn-ghost btn-sm" data-del="${t.id}">删除</button>
     </div>`;
 }
