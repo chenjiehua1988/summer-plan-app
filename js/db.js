@@ -605,6 +605,7 @@ export async function appendAudios(recordId, newUrls) {
 // 新增一条打卡记录（含备注/照片/录音），同时更新 daily_records 最近快照
 export async function addCheckin(rec, payload) {
   // rec: daily_records 行；payload: {note, photos[], audios[], title}
+  // 只写一条 checkins 流水（本次打卡内容）。daily_records 快照由调用方更新（避免覆盖/重复）。
   const row = {
     family_id: state.family.id, record_id: rec.id, child_id: rec.child_id,
     plan_id: rec.plan_id || state.currentPlanId, task_id: rec.task_id || null,
@@ -614,11 +615,6 @@ export async function addCheckin(rec, payload) {
   };
   const { data, error } = await supabase.from('checkins').insert(row).select().single();
   if (error) throw error;
-  // 更新 daily_records 最近快照（note/photos/audios）
-  await supabase.from('daily_records').update({
-    note: payload.note || null, photos: payload.photos || [], audios: payload.audios || [],
-    updated_at: new Date().toISOString()
-  }).eq('id', rec.id);
   return data;
 }
 // 取某任务（record）当天所有打卡记录，倒序

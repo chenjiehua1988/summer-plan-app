@@ -48,13 +48,13 @@ export async function renderVerify(view) {
       } catch (e) { toast('操作失败：' + e.message); }
     };
   });
-  // 补拍照片（写一条 checkins 流水）
+  // 补拍照片（追加到记录，不删原有；写一条 checkins 流水记录本次补拍）
   view.querySelectorAll('[data-addphoto]').forEach(b => {
     b.onclick = () => {
       const id = b.dataset.addphoto;
       const r = records.find(x => x.id === id);
       const input = document.createElement('input');
-      input.type = 'file'; input.accept = 'image/*'; input.multiple = true; input.capture = 'environment';
+      input.type = 'file'; input.accept = 'image/*'; input.multiple = true;
       input.onchange = async () => {
         const files = [...input.files];
         if (!files.length) return;
@@ -62,6 +62,9 @@ export async function renderVerify(view) {
           toast(`上传 ${files.length} 张…`);
           const urls = [];
           for (const f of files) urls.push(await db.uploadPhoto(id, f));
+          // 追加到 daily_records（不覆盖原有）
+          await db.appendPhotos(id, urls);
+          // 写一条 checkins 流水（记录补拍操作，只含本次新照片）
           await db.addCheckin(r, { note: '补拍照片', photos: urls, audios: [], title: r.title });
           toast('已添加照片');
           renderVerify(view);

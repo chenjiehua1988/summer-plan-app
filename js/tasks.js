@@ -330,8 +330,10 @@ function openCheckinPanel(id, r, records, el) {
       // 合并：已有的（没删的）+ 新传的
       const allPhotos = [...st.existingPhotos, ...newPhotos];
       const allAudios = [...st.existingAudios, ...newAudios];
-      // 写一条 checkins 流水（含合并后的全部），同时更新 daily_records 快照
+      // 写一条 checkins 流水（含本次保留的旧+新传）
       await db.addCheckin(r, { note, photos: allPhotos, audios: allAudios });
+      // 更新 daily_records 快照（用户没删的旧+新传）
+      await db.updateRecord(id, { note: note || null, photos: allPhotos, audios: allAudios });
       // 更新 daily_records 状态为 done（若已 verified 则不改状态，但仍记录本次打卡）
       if (r.status !== 'verified') {
         const patch = { status: 'done', completed_at: new Date().toISOString(), completed_by: actorName() };
