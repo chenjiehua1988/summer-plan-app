@@ -84,6 +84,18 @@ export async function renderVerify(view) {
       viewAudios(r?.audios || []);
     };
   });
+  // 撤销验收
+  view.querySelectorAll('[data-revoke]').forEach(b => {
+    b.onclick = async () => {
+      if (!confirm('撤销验收？状态变回待验收，并扣回已加的分。孩子重做通过后会重新加分。')) return;
+      try {
+        await db.revokeVerify(b.dataset.revoke);
+        toast('已撤销验收');
+        renderVerify(view);
+        if (window.refreshPointBadge) window.refreshPointBadge();
+      } catch (e) { toast('撤销失败：' + e.message); }
+    };
+  });
 }
 
 function verifyRow(r) {
@@ -115,6 +127,8 @@ function doneRow(r) {
   const txt = r.status === 'verified' ? '已验收' : '已打回';
   const photos = r.photos || [];
   const audios = r.audios || [];
+  const revokeBtn = r.status === 'verified'
+    ? `<button class="btn-ghost btn-sm" data-revoke="${r.id}">撤销</button>` : '';
   return `
     <li class="task-item is-done">
       <div class="task-body" style="flex:1">
@@ -129,6 +143,7 @@ function doneRow(r) {
           ${r.verified_at ? `<span class="note">验收 ${hm(r.verified_at)}${r.verified_by?' · '+r.verified_by:''}</span>` : ''}
         </div>
       </div>
+      ${revokeBtn}
     </li>`;
 }
 
