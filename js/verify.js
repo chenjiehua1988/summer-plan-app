@@ -3,6 +3,7 @@
 // ============================================================
 import { state, todayStr, toast, hm } from './supabase.js';
 import * as db from './db.js';
+import { viewFullPhoto } from './photo-viewer.js';
 
 export async function renderVerify(view) {
   const childId = state.currentChildId;
@@ -161,21 +162,7 @@ function viewPhotos(photos) {
   });
   document.body.appendChild(overlay);
 }
-// 单张全屏放大（可左右切换）
-function viewFullPhoto(photos, idx) {
-  let i = idx;
-  const ov = document.createElement('div');
-  ov.className = 'photo-fullscreen';
-  ov.innerHTML = `<button class="pf-close">✕</button><button class="pf-prev">‹</button><img><button class="pf-next">›</button><div class="pf-count"></div>`;
-  document.body.appendChild(ov);
-  const img = ov.querySelector('img');
-  const render = () => { img.src = photos[i]; ov.querySelector('.pf-count').textContent = `${i+1}/${photos.length}`; };
-  render();
-  ov.querySelector('.pf-close').onclick = () => ov.remove();
-  ov.querySelector('.pf-prev').onclick = (e) => { e.stopPropagation(); i = (i-1+photos.length)%photos.length; render(); };
-  ov.querySelector('.pf-next').onclick = (e) => { e.stopPropagation(); i = (i+1)%photos.length; render(); };
-  ov.onclick = (e) => { if (e.target === ov) ov.remove(); };
-}
+
 function viewAudios(audios) {
   if (!audios.length) return;
   const overlay = document.createElement('div');

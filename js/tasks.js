@@ -3,6 +3,7 @@
 // ============================================================
 import { state, todayStr, toast, actorName, segHtml, bindSeg, hm } from './supabase.js';
 import * as db from './db.js';
+import { viewFullPhoto } from './photo-viewer.js';
 
 // 今日打卡视图：渲染当天 daily_records，按标签分组；支持假期标记与打卡拍照
 export async function renderToday(view) {
@@ -378,21 +379,6 @@ function viewPhotos(photos) {
     img.onclick = (e) => { e.stopPropagation(); viewFullPhoto(photos, +img.dataset.i); };
   });
   document.body.appendChild(overlay);
-}
-// 单张全屏放大（可左右切换）
-function viewFullPhoto(photos, idx) {
-  let i = idx;
-  const ov = document.createElement('div');
-  ov.className = 'photo-fullscreen';
-  ov.innerHTML = `<button class="pf-close">✕</button><button class="pf-prev">‹</button><img><button class="pf-next">›</button><div class="pf-count"></div>`;
-  document.body.appendChild(ov);
-  const img = ov.querySelector('img');
-  const render = () => { img.src = photos[i]; ov.querySelector('.pf-count').textContent = `${i+1}/${photos.length}`; };
-  render();
-  ov.querySelector('.pf-close').onclick = () => ov.remove();
-  ov.querySelector('.pf-prev').onclick = (e) => { e.stopPropagation(); i = (i-1+photos.length)%photos.length; render(); };
-  ov.querySelector('.pf-next').onclick = (e) => { e.stopPropagation(); i = (i+1)%photos.length; render(); };
-  ov.onclick = (e) => { if (e.target === ov) ov.remove(); };
 }
 function viewAudios(audios) {
   if (!audios.length) return;
