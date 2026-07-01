@@ -39,11 +39,17 @@ async function vapidJwt(endpoint: string): Promise<string> {
   const enc = (o: object) => bytesToBase64Url(new TextEncoder().encode(JSON.stringify(o)));
   const data = `${enc(header)}.${enc(payload)}`;
 
-  // 导入 VAPID 私钥（P-256）：JWK 只传 d（私钥scalar），Deno 会派生公钥
+  // 导入 VAPID 私钥（P-256）：手动构造 PKCS8（标准34字节前缀 + 32字节scalar）
   const privKeyRaw = base64UrlToBytes(VAPID_PRIVATE_KEY);
-  console.log("privKeyRaw length:", privKeyRaw.length);
-  const jwk = { kty: "EC", crv: "P-256", d: bytesToBase64Url(privKeyRaw), ext: true };
-  const ecKey = await crypto.subtle.importKey("jwk", jwk, { name: "ECDSA", namedCurve: "P-256" }, false, ["sign"]);
+  const pkcs8Header = new Uint8Array([
+    0x30, 0x81, 0x87, 0x02, 0x01, 0x00, 0x30, 0x13, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01,
+    0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07, 0x04, 0x6d, 0x30, 0x6b, 0x02, 0x01, 0x01,
+    0x04, 0x20
+  ]);
+  const pkcs8 = new Uint8Array(pkcs8Header.length + privKeyRaw.length);
+  pkcs8.set(pkcs8Header, 0);
+  pkcs8.set(privKeyRaw, pkcs8Header.length);
+  const ecKey = await crypto.subtle.importKey("pkcs8", pkcs8, { name: "ECDSA", namedCurve: "P-256" }, false, ["sign"]);
 
   const sig = await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, ecKey, new TextEncoder().encode(data));
   return `${data}.${bytesToBase64Url(new Uint8Array(sig))}`;
