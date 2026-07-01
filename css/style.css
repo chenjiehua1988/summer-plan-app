@@ -318,6 +318,8 @@ body {
   background: rgba(255,255,255,.2); color: #fff; border: none; width: 36px; height: 36px; border-radius: 50%; font-size: 18px; }
 .photo-fullscreen .pf-rot { position: absolute; top: calc(var(--safe-top) + 10px); left: 14px;
   background: rgba(255,255,255,.2); color: #fff; border: none; width: 36px; height: 36px; border-radius: 50%; font-size: 18px; }
+.photo-fullscreen .pf-dl { position: absolute; bottom: calc(var(--safe-bottom) + 16px); right: 14px;
+  background: rgba(255,255,255,.2); color: #fff; border: none; width: 36px; height: 36px; border-radius: 50%; font-size: 18px; }
 .photo-fullscreen .pf-prev, .photo-fullscreen .pf-next { position: absolute; top: 50%; transform: translateY(-50%);
   background: rgba(255,255,255,.2); color: #fff; border: none; width: 44px; height: 44px; border-radius: 50%; font-size: 24px; }
 .photo-fullscreen .pf-prev { left: 8px; }

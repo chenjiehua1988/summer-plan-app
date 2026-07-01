@@ -1,8 +1,9 @@
 // ============================================================
-// 照片全屏查看器：双指缩放 + 单指平移 + 左右切换
+// 照片全屏查看器：双指缩放 + 单指平移 + 旋转 + 下载 + 左右切换
 // 用法：import { viewFullPhoto } from './photo-viewer.js'
 //      viewFullPhoto(photos, idx)
 // ============================================================
+import { toast } from './supabase.js';
 
 export function viewFullPhoto(photos, idx = 0) {
   if (!photos || !photos.length) return;
@@ -17,6 +18,7 @@ export function viewFullPhoto(photos, idx = 0) {
   ov.innerHTML = `
     <button class="pf-close">✕</button>
     <button class="pf-rot">⟳</button>
+    <button class="pf-dl">⬇</button>
     <button class="pf-prev">‹</button>
     <div class="pf-stage"><img draggable="false"></div>
     <button class="pf-next">›</button>
@@ -24,6 +26,20 @@ export function viewFullPhoto(photos, idx = 0) {
   document.body.appendChild(ov);
   const img = ov.querySelector('img');
   const stage = ov.querySelector('.pf-stage');
+
+  // 下载当前图（fetch 成 blob 再存，跨域也能下）
+  const downloadCurrent = async () => {
+    try {
+      toast('下载中…');
+      const r = await fetch(photos[i]);
+      const blob = await r.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `photo_${i + 1}.jpg`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    } catch (e) { toast('下载失败：' + e.message); }
+  };
 
   const apply = () => {
     img.style.transform = `translate(${x}px, ${y}px) rotate(${rot}deg) scale(${scale})`;
@@ -38,6 +54,7 @@ export function viewFullPhoto(photos, idx = 0) {
 
   ov.querySelector('.pf-close').onclick = (e) => { e.stopPropagation(); ov.remove(); };
   ov.querySelector('.pf-rot').onclick = (e) => { e.stopPropagation(); rot = (rot + 90) % 360; apply(); };
+  ov.querySelector('.pf-dl').onclick = (e) => { e.stopPropagation(); downloadCurrent(); };
   ov.querySelector('.pf-prev').onclick = (e) => { e.stopPropagation(); i = (i - 1 + photos.length) % photos.length; render(); };
   ov.querySelector('.pf-next').onclick = (e) => { e.stopPropagation(); i = (i + 1) % photos.length; render(); };
   ov.onclick = (e) => { if (e.target === ov) ov.remove(); };
