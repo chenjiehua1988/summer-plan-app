@@ -49,7 +49,7 @@ export async function renderToday(view) {
            ${state.mode === 'parent' ? `<button class="btn-ghost btn-sm" id="unmarkDayOff">取消假期</button>` : ''}`
         : (state.mode === 'parent'
             ? `<button class="btn-ghost btn-sm" id="markDayOff">今天设为假期</button>
-               <button class="btn-ghost btn-sm" id="presetDayOff">预设其他日期假期</button>`
+               <button class="btn-ghost btn-sm" id="presetDayOff">预设假期时段</button>`
             : `<span style="color:var(--muted)">今天正常学习</span>`)}
     </div>
     ${records.length === 0 ? `<div class="empty">今天还没有任务。去「设置」给当前周期/孩子添加任务清单。</div>` : ''}
@@ -93,13 +93,7 @@ function bindDayOff(view, childId, date, dayOff) {
     try { await db.unmarkDayOff(state.currentPlanId, childId, date); toast('已取消假期'); renderToday(view); }
     catch (e) { toast('操作失败：' + e.message); }
   };
-  if (preset) preset.onclick = async () => {
-    const d = prompt('要预设哪天为假期？（YYYY-MM-DD）');
-    if (!d) return;
-    const reason = prompt('假期原因（可选）') || '';
-    try { await db.markDayOff(state.currentPlanId, childId, d, reason); toast(`${d} 已设为假期`); }
-    catch (e) { toast('操作失败：' + e.message); }
-  };
+  if (preset) preset.onclick = () => openDayOffRangePanel(childId, view);
 }
 
 function taskRow(r) {
@@ -282,6 +276,47 @@ function openCheckinPanel(id, r, records, el) {
       overlay.remove();
       renderToday(document.getElementById('view'));
     } catch (e) { toast('保存失败：' + e.message); btn.disabled = false; btn.textContent = '完成打卡'; }
+  };
+}
+
+// 预设假期时段面板（底部抽屉，选开始~结束日期+原因）
+function openDayOffRangePanel(childId, view) {
+  const plan = state.plans.find(p => p.id === state.currentPlanId);
+  const today = todayStr();
+  const start = plan?.start_date || today;
+  const end = plan?.end_date || today;
+  const overlay = document.createElement('div');
+  overlay.className = 'checkin-overlay';
+  overlay.innerHTML = `
+    <div class="checkin-sheet">
+      <div class="checkin-head">
+        <span class="checkin-title">预设假期时段</span>
+        <button class="btn-ghost btn-sm" id="drClose">取消</button>
+      </div>
+      <p class="checkin-hint" style="color:var(--muted);font-size:13px;margin:0 0 12px">选一段时间，范围内每天都设为假期（不生成打卡）。</p>
+      <div class="dayoff-range-row">
+        <label>开始 <input type="date" id="drStart" value="${today}" min="${start}" max="${end}"></label>
+        <label>结束 <input type="date" id="drEnd" value="${today}" min="${start}" max="${end}"></label>
+      </div>
+      <input class="checkin-note" id="drReason" type="text" placeholder="原因（可选，如 旅游/考试）" />
+      <button class="btn-primary checkin-submit" id="drSubmit">设为假期</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  overlay.querySelector('#drClose').onclick = close;
+  overlay.querySelector('#drSubmit').onclick = async () => {
+    const s = overlay.querySelector('#drStart').value;
+    const e = overlay.querySelector('#drEnd').value;
+    const reason = overlay.querySelector('#drReason').value.trim();
+    if (!s || !e) { toast('请选开始和结束日期'); return; }
+    if (s > e) { toast('开始日期不能晚于结束日期'); return; }
+    try {
+      const n = await db.markDayOffRange(state.currentPlanId, childId, s, e, reason);
+      toast(`${s} ~ ${e} 共 ${n} 天已设为假期`);
+      overlay.remove();
+      renderToday(view);
+    } catch (err) { toast('操作失败：' + err.message); }
   };
 }
 

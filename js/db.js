@@ -452,6 +452,29 @@ export async function unmarkDayOff(planId, childId, date) {
   await supabase.from('daily_records').update({ status: 'pending' })
     .eq('plan_id', planId).eq('child_id', childId).eq('date', date).eq('status', 'skipped');
 }
+// 批量标记一段日期为假期（含首尾）
+export async function markDayOffRange(planId, childId, fromDate, toDate, reason) {
+  const dates = [];
+  const d = new Date(fromDate);
+  const end = new Date(toDate);
+  for (; d <= end; d.setDate(d.getDate() + 1)) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    dates.push(`${y}-${m}-${day}`);
+  }
+  const rows = dates.map(dt => ({
+    family_id: state.family.id, plan_id: planId, child_id: childId, date: dt, reason: reason || null
+  }));
+  const { error } = await supabase.from('day_off').upsert(rows, { onConflict: 'plan_id,child_id,date' });
+  if (error) throw error;
+  // 这些天已生成任务转 skipped
+  if (dates.length) {
+    await supabase.from('daily_records').update({ status: 'skipped' })
+      .eq('plan_id', planId).eq('child_id', childId).in('date', dates);
+  }
+  return dates.length;
+}
 
 // ---------- 照片上传（前端压缩 + Storage） ----------
 // 压缩图片：长边 1280，JPEG 0.7
