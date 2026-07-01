@@ -39,14 +39,10 @@ async function vapidJwt(endpoint: string): Promise<string> {
   const enc = (o: object) => bytesToBase64Url(new TextEncoder().encode(JSON.stringify(o)));
   const data = `${enc(header)}.${enc(payload)}`;
 
-  // 导入 VAPID 私钥（P-256）：用 JWK 方式（raw scalar 不能直接 importKey 为 ECDSA）
+  // 导入 VAPID 私钥（P-256）：JWK 只传 d（私钥scalar），Deno 会派生公钥
   const privKeyRaw = base64UrlToBytes(VAPID_PRIVATE_KEY);
-  const pubRaw = base64UrlToBytes(VAPID_PUBLIC_KEY);
-  // P-256 公钥点：04 + X(32) + Y(32)，共65字节；取 X/Y
-  const x = pubRaw.slice(1, 33);
-  const y = pubRaw.slice(33, 65);
-  const d = privKeyRaw;
-  const jwk = { kty: "EC", crv: "P-256", x: bytesToBase64Url(x), y: bytesToBase64Url(y), d: bytesToBase64Url(d), ext: true };
+  console.log("privKeyRaw length:", privKeyRaw.length);
+  const jwk = { kty: "EC", crv: "P-256", d: bytesToBase64Url(privKeyRaw), ext: true };
   const ecKey = await crypto.subtle.importKey("jwk", jwk, { name: "ECDSA", namedCurve: "P-256" }, false, ["sign"]);
 
   const sig = await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, ecKey, new TextEncoder().encode(data));
