@@ -116,7 +116,8 @@ export async function fetchTemplates(planId, childId) {
 export async function addTemplate(t) {
   const row = { family_id: state.family.id, plan_id: t.plan_id, child_id: t.child_id,
     subject: t.subject, title: t.title, default_minutes: t.default_minutes ?? 30,
-    points: t.points ?? 1, recurrence: t.recurrence ?? 'daily', active: t.active ?? true };
+    points: t.points ?? 1, recurrence: t.recurrence ?? 'daily', active: t.active ?? true,
+    start_date: t.start_date || null, end_date: t.end_date || null, weekdays: t.weekdays || [] };
   const { data, error } = await supabase.from('task_templates').insert(row).select().single();
   if (error) throw error;
   // 关联标签
@@ -214,6 +215,14 @@ export async function deleteTag(id) {
 }
 
 // ---------- 每日记录 ----------
+// 判断某模板在某天是否生效：起止范围内 且 周几匹配
+function inSchedule(t, date, dow) {
+  if (t.start_date && date < t.start_date) return false;
+  if (t.end_date && date > t.end_date) return false;
+  const wd = t.weekdays || [];
+  if (wd.length && !wd.includes(dow)) return false;
+  return true;
+}
 // 拉取某孩子某天的记录；若当天无记录，从「当前周期+孩子」active 模板自动生成
 // 当天若是假期（day_off），生成的记录 status='skipped'
 export async function ensureDailyRecords(childId, date, planId) {
@@ -229,7 +238,9 @@ export async function ensureDailyRecords(childId, date, planId) {
   // 生成：必须有当前周期
   if (!pid) return [];
   const templates = await fetchTemplates(pid, childId);
-  const active = templates.filter(t => t.active);
+  // 过滤：active 且 今天在起止范围内 且 今天周几在 weekdays 里
+  const dow = new Date(date + 'T00:00:00').getDay(); // 0=周日..6=周六
+  const active = templates.filter(t => t.active && inSchedule(t, date, dow));
   if (!active.length) return [];
   // 是否假期
   let isDayOff = false;

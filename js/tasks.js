@@ -384,93 +384,123 @@ export async function renderTemplates(container, childId) {
   const tags = state.tags;
 
   container.innerHTML = `
-    <div class="tmpl-add">
-      <input id="tTitle" type="text" placeholder="任务名（如：口算100题）" class="grow" />
-      <input id="tMin" type="number" placeholder="分钟" value="30" style="width:60px" />
-      <input id="tPts" type="number" placeholder="积分" value="1" style="width:54px" />
-      <button class="btn-primary btn-sm" id="tAdd">添加</button>
-    </div>
-    <div class="seg-block" id="tSubjectSeg"></div>
-    <input type="hidden" id="tSubject" value="语文" />
-    ${tags.length ? `<div class="tag-pick" id="tagPick">
-      ${tags.map(t => `<label data-tid="${t.id}"><input type="checkbox" value="${t.id}">${t.name}</label>`).join('')}
-    </div>` : ''}
+    <button class="btn-primary btn-sm" id="tAdd" style="margin-bottom:10px">+ 添加任务</button>
     ${templates.length ? templates.map(t => tmplRow(t, tags)).join('') : `<div class="empty">还没有任务，添加第一个吧。</div>`}
   `;
 
-  // 标签选中样式
-  container.querySelectorAll('#tagPick label').forEach(lb => {
-    const cb = lb.querySelector('input');
-    const sync = () => {
-      lb.classList.toggle('on', cb.checked);
-      const tg = tags.find(x => x.id === cb.value);
-      if (cb.checked && tg) lb.style.background = tg.color;
-      else lb.style.background = '';
-    };
-    cb.onchange = sync; sync();
-  });
-
-  // 科目选择卡
-  const subjSeg = container.querySelector('#tSubjectSeg');
-  subjSeg.innerHTML = segHtml(['语文','数学','英语','生活'], '语文', true);
-  bindSeg(subjSeg, v => { container.querySelector('#tSubject').value = v; });
-
-  container.querySelector('#tAdd').onclick = async () => {
-    const title = container.querySelector('#tTitle').value.trim();
-    if (!title) { toast('请输入任务名'); return; }
-    const tagIds = [...container.querySelectorAll('#tagPick input:checked')].map(c => c.value);
-    try {
-      await db.addTemplate({
-        plan_id: state.currentPlanId, child_id: childId,
-        subject: container.querySelector('#tSubject').value,
-        title, default_minutes: +container.querySelector('#tMin').value,
-        points: +container.querySelector('#tPts').value, tagIds
-      });
-      toast('已添加');
-      renderTemplates(container, childId);
-    } catch (e) { toast('添加失败：' + e.message); }
-  };
+  container.querySelector('#tAdd').onclick = () => openTemplatePanel(null, tags, container, childId);
   container.querySelectorAll('[data-del]').forEach(b => {
     b.onclick = async () => {
+      if (!confirm('删除该任务？')) return;
       try { await db.deleteTemplate(b.dataset.del); toast('已删除'); renderTemplates(container, childId); }
       catch (e) { toast('删除失败：' + e.message); }
     };
   });
   container.querySelectorAll('[data-edit]').forEach(b => {
-    b.onclick = () => openEditTemplate(b.dataset.edit, templates, tags, container, childId);
+    b.onclick = () => {
+      const t = templates.find(x => x.id === b.dataset.edit);
+      openTemplatePanel(t, tags, container, childId);
+    };
   });
 }
 
-// 编辑任务：用 prompt 逐项改，标签用简易多选
-function openEditTemplate(id, templates, tags, container, childId) {
-  const t = templates.find(x => x.id === id);
-  if (!t) return;
-  const title = prompt('任务名', t.title);
-  if (title === null) return;
-  const min = prompt('用时（分钟）', t.default_minutes);
-  if (min === null) return;
-  const pts = prompt('积分', t.points);
-  if (pts === null) return;
-  const subj = prompt('科目（语文/数学/英语/生活）', t.subject);
-  if (subj === null) return;
-  // 标签多选：列出标签，已选的带[√]
-  const cur = t.tagIds || [];
-  const tagStr = tags.map(tg => (cur.includes(tg.id) ? '[√]' : '[ ]') + tg.name).join('  ');
-  const tagInput = prompt('选择标签（输入标签名，多个用逗号分隔；留空=不改变）\n' + tagStr, cur.map(id => (tags.find(x=>x.id===id)||{}).name).join(','));
-  const active = confirm(t.active === false ? '当前已停用，点确定启用，取消保持停用' : '点确定保持启用，取消则停用');
-  const patch = { title: title.trim() || t.title, default_minutes: +min || t.default_minutes,
-    points: +pts || t.points, subject: ['语文','数学','英语','生活'].includes(subj) ? subj : t.subject,
-    active: active ? true : (t.active === false ? false : true) };
-  // 解析标签
-  let newTagIds;
-  if (tagInput !== null) {
-    const names = tagInput.split(/[,，、\s]+/).map(s=>s.trim()).filter(Boolean);
-    newTagIds = tags.filter(tg => names.includes(tg.name)).map(tg => tg.id);
-  }
-  db.updateTemplate(id, patch, tagInput === null ? undefined : newTagIds).then(() => {
-    toast('已保存');
-    renderTemplates(container, childId);
-  }).catch(e => toast('保存失败：' + e.message));
+// 任务编辑/添加面板（底部抽屉）
+function openTemplatePanel(t, tags, container, childId) {
+  const isEdit = !!t;
+  const cur = t || { title:'', subject:'语文', default_minutes:30, points:1, active:true, tagIds:[], weekdays:[], start_date:'', end_date:'' };
+  const plan = state.plans.find(p => p.id === state.currentPlanId);
+  const overlay = document.createElement('div');
+  overlay.className = 'checkin-overlay';
+  overlay.innerHTML = `
+    <div class="checkin-sheet">
+      <div class="checkin-head">
+        <span class="checkin-title">${isEdit ? '编辑任务' : '添加任务'}</span>
+        <button class="btn-ghost btn-sm" id="tpClose">取消</button>
+      </div>
+      <input class="checkin-note" id="tpTitle" type="text" placeholder="任务名（如：口算100题）" value="${cur.title}" />
+      <div class="tp-label">科目</div>
+      <div class="seg-block" id="tpSubject"></div>
+      <div class="tp-row">
+        <label class="tp-label">用时(分) <input id="tpMin" type="number" value="${cur.default_minutes}" style="width:70px"></label>
+        <label class="tp-label">积分 <input id="tpPts" type="number" value="${cur.points}" style="width:60px"></label>
+      </div>
+      <div class="tp-label">标签</div>
+      <div class="seg" id="tpTags"></div>
+      <div class="tp-label">生效日期（留空=整周期）</div>
+      <div class="dayoff-range-row">
+        <label>开始 <input type="date" id="tpStart" value="${cur.start_date||''}" min="${plan?.start_date||''}" max="${plan?.end_date||''}"></label>
+        <label>结束 <input type="date" id="tpEnd" value="${cur.end_date||''}" min="${plan?.start_date||''}" max="${plan?.end_date||''}"></label>
+      </div>
+      <div class="tp-label">每周哪几天（不选=每天）</div>
+      <div class="seg-block" id="tpWeekdays"></div>
+      <div class="tp-row">
+        <label class="tp-label"><input type="checkbox" id="tpActive" ${cur.active!==false?'checked':''}> 启用</label>
+      </div>
+      <button class="btn-primary checkin-submit" id="tpSave">保存</button>
+      ${isEdit ? `<button class="btn-ghost checkin-submit" id="tpDel" style="margin-top:8px;color:var(--no)">删除任务</button>` : ''}
+    </div>`;
+  document.body.appendChild(overlay);
+  const $ = s => overlay.querySelector(s);
+  const close = () => overlay.remove();
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  $('#tpClose').onclick = close;
+
+  // 科目单选
+  const subjEl = $('#tpSubject');
+  subjEl.innerHTML = segHtml(['语文','数学','英语','生活'], cur.subject, true);
+  let subj = cur.subject;
+  subjEl.querySelectorAll('.seg-btn').forEach(b => b.onclick = () => {
+    subjEl.querySelectorAll('.seg-btn').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on'); subj = b.dataset.seg;
+  });
+  // 标签多选
+  const tagEl = $('#tpTags');
+  const selTags = new Set(cur.tagIds || []);
+  tagEl.innerHTML = tags.map(tg => `<button type="button" class="seg-btn ${selTags.has(tg.id)?'on':''}" data-tid="${tg.id}">${tg.name}</button>`).join('');
+  tagEl.querySelectorAll('.seg-btn').forEach(b => b.onclick = () => {
+    b.classList.toggle('on');
+    if (b.classList.contains('on')) selTags.add(b.dataset.tid); else selTags.delete(b.dataset.tid);
+  });
+  // 周几多选
+  const wdEl = $('#tpWeekdays');
+  const WD = [['日',0],['一',1],['二',2],['三',3],['四',4],['五',5],['六',6]];
+  const selWd = new Set(cur.weekdays || []);
+  wdEl.innerHTML = WD.map(([n,v]) => `<button type="button" class="seg-btn ${selWd.has(v)?'on':''}" data-wd="${v}">${n}</button>`).join('');
+  wdEl.querySelectorAll('.seg-btn').forEach(b => b.onclick = () => {
+    b.classList.toggle('on');
+    const v = +b.dataset.wd;
+    if (b.classList.contains('on')) selWd.add(v); else selWd.delete(v);
+  });
+
+  $('#tpSave').onclick = async () => {
+    const title = $('#tpTitle').value.trim();
+    if (!title) { toast('请输入任务名'); return; }
+    const patch = {
+      title, subject: subj,
+      default_minutes: +$('#tpMin').value || 30,
+      points: +$('#tpPts').value || 1,
+      start_date: $('#tpStart').value || null,
+      end_date: $('#tpEnd').value || null,
+      weekdays: [...selWd],
+      active: $('#tpActive').checked,
+      tagIds: [...selTags]
+    };
+    try {
+      if (isEdit) {
+        await db.updateTemplate(t.id, patch, patch.tagIds);
+      } else {
+        await db.addTemplate({ ...patch, plan_id: state.currentPlanId, child_id: childId });
+      }
+      toast('已保存');
+      overlay.remove();
+      renderTemplates(container, childId);
+    } catch (e) { toast('保存失败：' + e.message); }
+  };
+  if (isEdit) $('#tpDel').onclick = async () => {
+    if (!confirm('删除该任务？')) return;
+    try { await db.deleteTemplate(t.id); toast('已删除'); overlay.remove(); renderTemplates(container, childId); }
+    catch (e) { toast('删除失败：' + e.message); }
+  };
 }
 
 function tmplRow(t, tags) {
@@ -479,11 +509,24 @@ function tmplRow(t, tags) {
     return tg ? `<span class="tag-chip" style="background:${tg.color}">${tg.name}</span>` : '';
   }).join('');
   const activeTag = t.active === false ? '<span class="badge badge-skip">已停用</span>' : '';
+  // 生效时段标记
+  const sched = [];
+  const wd = t.weekdays || [];
+  if (wd.length) {
+    const names = ['日','一','二','三','四','五','六'];
+    // 连续段简化显示
+    sched.push('周' + [...wd].sort().map(d=>names[d]).join(''));
+  }
+  if (t.start_date || t.end_date) {
+    sched.push(`${t.start_date?(t.start_date.slice(5))+'起':''}${t.end_date?('至'+(t.end_date.slice(5))):''}`);
+  }
+  const schedHtml = sched.length ? `<span class="note" style="color:var(--primary)">📅 ${sched.join(' · ')}</span>` : '';
   return `
     <div class="tmpl-row">
       <div class="tmpl-name">
         ${t.title} <small>${t.default_minutes}分·${t.points}分</small> ${activeTag}
         <div style="margin-top:3px">${tagHtml}<span class="subj subj-${t.subject}" style="margin-left:4px">${t.subject}</span></div>
+        ${schedHtml ? `<div style="margin-top:3px">${schedHtml}</div>` : ''}
       </div>
       <button class="btn-ghost btn-sm" data-edit="${t.id}">改</button>
       <button class="btn-ghost btn-sm" data-del="${t.id}">删除</button>
