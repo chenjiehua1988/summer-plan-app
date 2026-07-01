@@ -7,8 +7,8 @@
 export function viewFullPhoto(photos, idx = 0) {
   if (!photos || !photos.length) return;
   let i = idx;
-  // 缩放/平移状态
-  let scale = 1, x = 0, y = 0;
+  // 缩放/平移/旋转状态
+  let scale = 1, x = 0, y = 0, rot = 0;
   let dragging = false, lastX = 0, lastY = 0;
   let pinchDist = 0, pinchScale = 1;
 
@@ -16,6 +16,7 @@ export function viewFullPhoto(photos, idx = 0) {
   ov.className = 'photo-fullscreen';
   ov.innerHTML = `
     <button class="pf-close">✕</button>
+    <button class="pf-rot">⟳</button>
     <button class="pf-prev">‹</button>
     <div class="pf-stage"><img draggable="false"></div>
     <button class="pf-next">›</button>
@@ -25,9 +26,9 @@ export function viewFullPhoto(photos, idx = 0) {
   const stage = ov.querySelector('.pf-stage');
 
   const apply = () => {
-    img.style.transform = `translate(${x}px, ${y}px) scale(${scale})`;
+    img.style.transform = `translate(${x}px, ${y}px) rotate(${rot}deg) scale(${scale})`;
   };
-  const reset = () => { scale = 1; x = 0; y = 0; apply(); };
+  const reset = () => { scale = 1; x = 0; y = 0; rot = 0; apply(); };
   const render = () => {
     img.src = photos[i];
     ov.querySelector('.pf-count').textContent = `${i + 1}/${photos.length}`;
@@ -36,6 +37,7 @@ export function viewFullPhoto(photos, idx = 0) {
   render();
 
   ov.querySelector('.pf-close').onclick = (e) => { e.stopPropagation(); ov.remove(); };
+  ov.querySelector('.pf-rot').onclick = (e) => { e.stopPropagation(); rot = (rot + 90) % 360; apply(); };
   ov.querySelector('.pf-prev').onclick = (e) => { e.stopPropagation(); i = (i - 1 + photos.length) % photos.length; render(); };
   ov.querySelector('.pf-next').onclick = (e) => { e.stopPropagation(); i = (i + 1) % photos.length; render(); };
   ov.onclick = (e) => { if (e.target === ov) ov.remove(); };
