@@ -69,7 +69,7 @@ async function maybeEnterApp() {
   switchTab(state.pendingTab || 'today');
 }
 
-// 按 mode 显示/隐藏 UI：child 隐藏验收/设置 tab，隐藏孩子切换器（孩子只看自己）
+// 按 mode 显示/隐藏 UI：child 隐藏验收/设置 tab，左上角显示孩子名（替代孩子切换器）
 function applyModeUI() {
   const isChild = state.mode === 'child';
   document.querySelectorAll('.tab').forEach(t => {
@@ -77,9 +77,16 @@ function applyModeUI() {
     if (isChild && (tab === 'verify' || tab === 'setup' || tab === 'life')) t.style.display = 'none';
     else t.style.display = '';
   });
-  // 孩子模式隐藏孩子切换器（只看自己）
   const cs = document.getElementById('childSwitcher');
-  if (cs) cs.style.display = isChild ? 'none' : '';
+  const who = document.getElementById('whoAmI');
+  if (isChild) {
+    if (cs) cs.style.display = 'none';
+    const c = state.children.find(x => x.id === state.currentChildId);
+    if (who) { who.textContent = c ? `${c.name}·${c.grade_target || ''}` : '我'; who.style.display = ''; }
+  } else {
+    if (cs) cs.style.display = '';
+    if (who) who.style.display = 'none';
+  }
 }
 
 function registerSW() {
