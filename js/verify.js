@@ -87,7 +87,7 @@ export async function renderVerify(view) {
   // 撤销验收
   view.querySelectorAll('[data-revoke]').forEach(b => {
     b.onclick = async () => {
-      if (!confirm('撤销验收？状态变回待验收，并扣回已加的分。孩子重做通过后会重新加分。')) return;
+      if (!confirm('撤销并打回？状态变为「被打回」，扣回已加的分。孩子看到后需重做，重做通过后重新加分。')) return;
       try {
         await db.revokeVerify(b.dataset.revoke);
         toast('已撤销验收');

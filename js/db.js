@@ -312,15 +312,15 @@ export async function verifyRecord(id, status, note) {
   return updateRecord(id, patch); // 复用在线/离线逻辑；verified 触发器在服务端自动加分
 }
 
-// 撤销验收：verified → done，删除该 record 的加分流水（净扣回分）
-// 这样再通过时判重触发器看无流水会重新加，账面平衡
+// 撤销验收：verified → rejected（打回重写），删除该 record 的加分流水（净扣回分）
+// 孩子看到"被打回"知道要重做；重做打卡后再验收，判重触发器看无流水会重新加
 export async function revokeVerify(id) {
   // 删除该 record 的加分流水（delta>0）
   const { error: e1 } = await supabase.from('point_ledger')
     .delete().eq('source_record_id', id).gt('delta', 0);
   if (e1) throw e1;
-  // 状态回 done，清验收字段
-  const patch = { status: 'done', verified_at: null, verified_by: null,
+  // 状态置 rejected（打回），清验收字段
+  const patch = { status: 'rejected', verified_at: null, verified_by: null,
     updated_at: new Date().toISOString() };
   return updateRecord(id, patch);
 }
