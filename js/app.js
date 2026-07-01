@@ -1,7 +1,7 @@
 // ============================================================
 // app.js：路由 / 导航 / 初始化
 // ============================================================
-import { state, toast, todayStr, segHtml, bindSeg } from './supabase.js';
+import { state, toast, todayStr, segHtml, bindSeg, mdhm } from './supabase.js';
 import * as auth from './auth.js';
 import * as db from './db.js';
 import { renderToday, renderTemplates } from './tasks.js';
@@ -453,7 +453,7 @@ function renderRedeemReqCard() {
           return `<div class="mgmt-row">
             <div class="grow">
               <div>${kid ? kid.name : '?'} 想兑「${r.name}」<small style="color:var(--warn)"> ${r.cost_points}分</small></div>
-              <small style="color:var(--muted)">${(r.created_at||'').slice(0,16).replace('T',' ')}</small>
+              <small style="color:var(--muted)">${mdhm(r.created_at)}</small>
             </div>
             <button class="btn-primary btn-sm" data-approve="${r.id}">同意</button>
             <button class="btn-ghost btn-sm" data-reject="${r.id}">拒绝</button>

@@ -1,7 +1,7 @@
 // ============================================================
 // 积分与奖励：余额、兑换商店、流水、兑换记录
 // ============================================================
-import { state, toast } from './supabase.js';
+import { state, toast, mdhm } from './supabase.js';
 import * as db from './db.js';
 
 // 更新顶栏积分显示
@@ -51,7 +51,7 @@ export async function renderPoints(container, childId) {
           const cls = r.status === 'pending' ? 'badge-mid' : r.status === 'approved' ? 'badge-ok' : 'badge-no';
           return `<li class="ledger-row">
             <div><div class="ledger-reason">${r.name} <span class="badge ${cls}">${st}</span></div>
-            <small>${(r.created_at||'').slice(0,16).replace('T',' ')}</small></div>
+            <small>${mdhm(r.created_at)}</small></div>
             <div class="ledger-delta minus">-${r.cost_points}</div>
           </li>`;
         }).join('')}
@@ -63,7 +63,7 @@ export async function renderPoints(container, childId) {
         ${ledger.slice(0, 30).map(l => `
           <li class="ledger-row">
             <div><div class="ledger-reason">${l.reason}</div>
-            <small>${(l.created_at||'').slice(0,16).replace('T',' ')}</small></div>
+            <small>${mdhm(l.created_at)}</small></div>
             <div class="ledger-delta ${l.delta>0?'plus':'minus'}">${l.delta>0?'+':''}${l.delta}</div>
           </li>`).join('')}
       </ul>`}
@@ -74,7 +74,7 @@ export async function renderPoints(container, childId) {
         ${rewards.map(rw => `
           <li class="ledger-row">
             <div><div class="ledger-reason">${rw.name}</div>
-            <small>${(rw.redeemed_at||'').slice(0,16).replace('T',' ')}</small></div>
+            <small>${mdhm(rw.redeemed_at)}</small></div>
             <div class="ledger-delta minus">-${rw.cost_points}</div>
           </li>`).join('')}
       </ul>`}

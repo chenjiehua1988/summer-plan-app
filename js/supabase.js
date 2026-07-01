@@ -75,6 +75,16 @@ export function hm(ts) {
   return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
 }
 
+// 工具：月日时分（本地时区），如 07-01 11:35
+export function mdhm(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  if (isNaN(d)) return '';
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return m + '-' + day + ' ' + hm(ts);
+}
+
 // 工具：生成分段选择卡 HTML（替代选项少的下拉框）
 // opts: [{value,label}] 或 ['a','b']；currentVal: 当前选中值；block: 是否撑满
 export function segHtml(opts, currentVal, block = false) {

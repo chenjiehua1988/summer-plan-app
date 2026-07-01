@@ -1,7 +1,7 @@
 // ============================================================
 // 任务模板管理 + 每日打卡视图（按周期 + 标签）
 // ============================================================
-import { state, todayStr, toast, actorName, segHtml, bindSeg, hm } from './supabase.js';
+import { state, todayStr, toast, actorName, segHtml, bindSeg, hm, mdhm } from './supabase.js';
 import * as db from './db.js';
 import { viewFullPhoto } from './photo-viewer.js';
 
@@ -100,7 +100,7 @@ async function openHistoryPanel(r) {
   const html = list.map(c => `
     <div class="checkin-item">
       <div class="checkin-head">
-        <span class="checkin-time">${(c.created_at||'').slice(5,16).replace('T',' ')} · ${c.created_by||''}</span>
+        <span class="checkin-time">${mdhm(c.created_at)} · ${c.created_by||''}</span>
       </div>
       ${c.note ? `<div class="checkin-note">${c.note}</div>` : ''}
       ${(c.photos||[]).length ? `<div class="checkin-media">${(c.photos||[]).map(u=>`<img src="${u}" data-full="${u}">`).join('')}</div>` : ''}

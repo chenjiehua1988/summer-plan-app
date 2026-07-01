@@ -1,7 +1,7 @@
 // ============================================================
 // 统计报表（按学习周期）：总进度、倒计时、按标签/科目、历史对比、近7天
 // ============================================================
-import { state, todayStr } from './supabase.js';
+import { state, todayStr, hm, mdhm } from './supabase.js';
 import * as db from './db.js';
 
 export async function renderStats(view) {
@@ -164,7 +164,7 @@ export async function renderStats(view) {
     if (!list.length) { area.innerHTML = `<div class="empty">${date} 没有打卡记录。</div>`; return; }
     area.innerHTML = list.map(c => `
       <div class="checkin-item">
-        <div class="checkin-head"><span class="checkin-time">${(c.created_at||'').slice(11,16)} · ${c.created_by||''}</span> <span class="subj subj-${c.title?'':''}" style="background:#aaa">${c.title||''}</span></div>
+        <div class="checkin-head"><span class="checkin-time">${hm(c.created_at)} · ${c.created_by||''}</span> <span class="subj subj-${c.title?'':''}" style="background:#aaa">${c.title||''}</span></div>
         ${c.title ? `<div class="checkin-note" style="font-weight:600">${c.title}</div>` : ''}
         ${c.note ? `<div class="checkin-note">${c.note}</div>` : ''}
         ${(c.photos||[]).length ? `<div class="checkin-media">${(c.photos||[]).map(u=>`<img src="${u}" data-full="${u}">`).join('')}</div>` : ''}
