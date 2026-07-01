@@ -125,7 +125,7 @@ function doneRow(r) {
           ${audios.length ? `<span class="task-photos link" data-viewaudio="${r.id}">🎙 ${audios.length}</span>` : ''}
           ${r.note ? `<span class="note">📝 ${r.note}</span>` : ''}
           ${r.completed_at ? `<span class="note">打卡 ${hm(r.completed_at)}</span>` : ''}
-          ${r.verified_at ? `<span class="note">验收 ${hm(r.verified_at)}</span>` : ''}
+          ${r.verified_at ? `<span class="note">验收 ${hm(r.verified_at)}${r.verified_by?' · '+r.verified_by:''}</span>` : ''}
         </div>
       </div>
     </li>`;
