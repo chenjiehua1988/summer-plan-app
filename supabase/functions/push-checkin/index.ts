@@ -65,7 +65,7 @@ Deno.serve(async (req) => {
     if (!subs || !subs.length) return new Response("no subs", { status: 200 });
 
     const appServer = await buildAppServer();
-    const payload = JSON.stringify({ title: "学习计划", body: `${name}完成了「${title}」，等验收` });
+    const payload = JSON.stringify({ title: "宝贝打卡了", body: `${name}完成了「${title}」，请验收` });
 
     const results = [];
     for (const s of subs) {
