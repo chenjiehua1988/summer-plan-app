@@ -154,42 +154,55 @@ async function sendPush(sub: { endpoint: string; p256dh: string; auth: string },
 
 // ---------- 主函数 ----------
 Deno.serve(async (req) => {
+  console.log("push-checkin invoked");
   try {
+    // 检查环境变量
+    if (!VAPID_PRIVATE_KEY || !VAPID_PUBLIC_KEY || !SUPABASE_URL || !SERVICE_ROLE_KEY) {
+      console.error("missing env vars", { hasPriv: !!VAPID_PRIVATE_KEY, hasPub: !!VAPID_PUBLIC_KEY, hasUrl: !!SUPABASE_URL, hasKey: !!SERVICE_ROLE_KEY });
+      return new Response("missing env", { status: 500 });
+    }
     const body = await req.json();
+    console.log("webhook body:", JSON.stringify(body).slice(0, 500));
     // DB webhook 格式: { type, table, record, old_record }
     const rec = body.record || body;
     const childId = rec.child_id;
-    const childName = rec.child_name || rec.title || "孩子";
     const title = rec.title || "任务";
-    if (!childId) return new Response("no child_id", { status: 400 });
+    if (!childId) { console.log("no child_id in", JSON.stringify(rec).slice(0,200)); return new Response("no child_id", { status: 400 }); }
 
     const sb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
     // 查家庭
-    const { data: child } = await sb.from("children").select("family_id,name").eq("id", childId).single();
-    if (!child) return new Response("no child", { status: 404 });
+    const { data: child, error: ce } = await sb.from("children").select("family_id,name").eq("id", childId).single();
+    if (ce) { console.error("child query error", ce.message); return new Response("child err", { status: 500 }); }
+    if (!child) { console.log("no child"); return new Response("no child", { status: 404 }); }
     const familyId = child.family_id;
     const name = child.name || "孩子";
+    console.log("child:", name, "family:", familyId);
 
     // 查该家庭所有家长订阅
-    const { data: subs } = await sb.from("push_subscriptions").select("*").eq("family_id", familyId);
+    const { data: subs, error: se } = await sb.from("push_subscriptions").select("*").eq("family_id", familyId);
+    if (se) { console.error("subs query error", se.message); return new Response("subs err", { status: 500 }); }
+    console.log("subs count:", subs?.length || 0);
     if (!subs || !subs.length) return new Response("no subs", { status: 200 });
 
     const payload = JSON.stringify({ title: "学习计划", body: `${name}完成了「${title}」，等验收` });
     const results = [];
     for (const s of subs) {
       try {
+        console.log("sending push to", s.endpoint.slice(0, 50));
         const code = await sendPush({ endpoint: s.endpoint, p256dh: s.p256dh, auth: s.auth }, payload);
+        console.log("push result", code);
         results.push({ code, endpoint: s.endpoint });
-        // 失效订阅清理（410 Gone）
         if (code === 410 || code === 404) {
           await sb.from("push_subscriptions").delete().eq("id", s.id);
         }
       } catch (e) {
+        console.error("push error", String(e));
         results.push({ error: String(e) });
       }
     }
     return new Response(JSON.stringify({ ok: true, results }), { headers: { "Content-Type": "application/json" } });
   } catch (e) {
+    console.error("top error", String(e), e?.stack);
     return new Response(JSON.stringify({ error: String(e) }), { status: 500 });
   }
 });
