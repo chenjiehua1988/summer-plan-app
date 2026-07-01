@@ -190,9 +190,10 @@ function openCheckinPanel(id, r, records, el) {
         <span class="checkin-title">${r.title}</span>
         <button class="btn-ghost btn-sm" id="ckClose">取消</button>
       </div>
-      <input class="checkin-note" type="text" placeholder="说明（可选）" value="${r.note || ''}" />
+      <input class="checkin-note" type="text" placeholder="说明（可选）" value="${(r.status === 'rejected' ? '' : (r.note || ''))}" />
       <div class="checkin-actions">
-        <button class="btn-ghost btn-sm" id="ckPhoto">📷 拍照/选图</button>
+        <button class="btn-ghost btn-sm" id="ckPhoto">📷 拍照</button>
+        <button class="btn-ghost btn-sm" id="ckGallery">🖼 选相册</button>
         <button class="btn-ghost btn-sm" id="ckRec">🎙 录音</button>
         <button class="btn-ghost btn-sm" id="ckAudioFile">🎵 选音频文件</button>
       </div>
@@ -212,13 +213,24 @@ function openCheckinPanel(id, r, records, el) {
   $('#ckClose').onclick = close;
 
   const renderPicked = () => {
-    // 已有的照片/录音（带删除×，点图可看）
-    const eph = st.existingPhotos.map((u, i) => `<span class="pick-chip">📷<b data-rm-ephoto="${i}">×</b></span>`).join('');
-    const eau = st.existingAudios.map((u, i) => `<span class="pick-chip">🎙<b data-rm-eaudio="${i}">×</b></span>`).join('');
-    // 新加的
-    const ph = st.photoFiles.map((f, i) => `<span class="pick-chip">📷新<b data-rm-photo="${i}">×</b></span>`).join('');
+    // 已有照片：缩略图（点看大图）+ 删除×
+    const eph = st.existingPhotos.map((u, i) =>
+      `<span class="pick-thumb"><img src="${u}" data-view="${i}"><b data-rm-ephoto="${i}">×</b></span>`).join('');
+    // 已有录音：芯片 + 删除
+    const eau = st.existingAudios.map((u, i) => `<span class="pick-chip">🎙${i+1}<b data-rm-eaudio="${i}">×</b></span>`).join('');
+    // 新选照片：缩略图（本地预览）+ 删除
+    const ph = st.photoFiles.map((f, i) => {
+      const url = URL.createObjectURL(f);
+      return `<span class="pick-thumb"><img src="${url}"><b data-rm-photo="${i}">×</b></span>`;
+    }).join('');
+    // 新录音
     const au = st.audioBlobs.map((a, i) => `<span class="pick-chip">🎙${a.sec}秒<b data-rm-audio="${i}">×</b></span>`).join('');
     $('#ckPicked').innerHTML = eph + eau + ph + au;
+    // 已有照片点看大图
+    overlay.querySelectorAll('[data-view]').forEach(img => img.onclick = (e) => {
+      e.stopPropagation();
+      viewFullPhoto(st.existingPhotos, +img.dataset.view);
+    });
     overlay.querySelectorAll('[data-rm-ephoto]').forEach(b => b.onclick = () => { st.existingPhotos.splice(+b.dataset.rmEphoto,1); renderPicked(); });
     overlay.querySelectorAll('[data-rm-eaudio]').forEach(b => b.onclick = () => { st.existingAudios.splice(+b.dataset.rmEaudio,1); renderPicked(); });
     overlay.querySelectorAll('[data-rm-photo]').forEach(b => b.onclick = () => { st.photoFiles.splice(+b.dataset.rmPhoto,1); renderPicked(); });
@@ -226,10 +238,17 @@ function openCheckinPanel(id, r, records, el) {
   };
   renderPicked(); // 初始显示已有的
 
-  // 拍照/选图
+  // 拍照（调相机）
   $('#ckPhoto').onclick = () => {
     const input = document.createElement('input');
     input.type = 'file'; input.accept = 'image/*'; input.multiple = true; input.capture = 'environment';
+    input.onchange = () => { st.photoFiles.push(...input.files); renderPicked(); };
+    input.click();
+  };
+  // 选相册（不调相机，可多选）
+  $('#ckGallery').onclick = () => {
+    const input = document.createElement('input');
+    input.type = 'file'; input.accept = 'image/*'; input.multiple = true;
     input.onchange = () => { st.photoFiles.push(...input.files); renderPicked(); };
     input.click();
   };
