@@ -305,7 +305,20 @@ body {
   display: flex; flex-direction: column; padding: calc(var(--safe-top) + 12px) 12px calc(var(--safe-bottom) + 12px); }
 .photo-bar { display: flex; justify-content: space-between; align-items: center; color: #fff; margin-bottom: 10px; }
 .photo-grid { overflow-y: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.photo-grid img { width: 100%; border-radius: 8px; }
+.photo-grid img { width: 100%; border-radius: 8px; cursor: pointer; }
+
+/* 单张全屏放大 */
+.photo-fullscreen { position: fixed; inset: 0; background: #000; z-index: 320;
+  display: flex; align-items: center; justify-content: center; }
+.photo-fullscreen img { max-width: 95vw; max-height: 80vh; object-fit: contain; }
+.photo-fullscreen .pf-close { position: absolute; top: calc(var(--safe-top) + 10px); right: 14px;
+  background: rgba(255,255,255,.2); color: #fff; border: none; width: 36px; height: 36px; border-radius: 50%; font-size: 18px; }
+.photo-fullscreen .pf-prev, .photo-fullscreen .pf-next { position: absolute; top: 50%; transform: translateY(-50%);
+  background: rgba(255,255,255,.2); color: #fff; border: none; width: 44px; height: 44px; border-radius: 50%; font-size: 24px; }
+.photo-fullscreen .pf-prev { left: 8px; }
+.photo-fullscreen .pf-next { right: 8px; }
+.photo-fullscreen .pf-count { position: absolute; bottom: calc(var(--safe-bottom) + 16px); left: 0; right: 0;
+  text-align: center; color: #fff; font-size: 13px; }
 
 /* 打卡面板（底部抽屉） */
 .checkin-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 280;

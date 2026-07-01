@@ -138,10 +138,28 @@ function viewPhotos(photos) {
   const overlay = document.createElement('div');
   overlay.className = 'photo-overlay';
   overlay.innerHTML = `
-    <div class="photo-bar"><span>照片 ${photos.length} 张</span><button class="btn-ghost btn-sm">关闭</button></div>
-    <div class="photo-grid">${photos.map(u => `<img src="${u}" />`).join('')}</div>`;
+    <div class="photo-bar"><span>照片 ${photos.length} 张（点图放大）</span><button class="btn-ghost btn-sm">关闭</button></div>
+    <div class="photo-grid">${photos.map((u,i) => `<img src="${u}" data-i="${i}">`).join('')}</div>`;
   overlay.onclick = (e) => { if (e.target === overlay || e.target.tagName === 'BUTTON') overlay.remove(); };
+  overlay.querySelectorAll('img').forEach(img => {
+    img.onclick = (e) => { e.stopPropagation(); viewFullPhoto(photos, +img.dataset.i); };
+  });
   document.body.appendChild(overlay);
+}
+// 单张全屏放大（可左右切换）
+function viewFullPhoto(photos, idx) {
+  let i = idx;
+  const ov = document.createElement('div');
+  ov.className = 'photo-fullscreen';
+  ov.innerHTML = `<button class="pf-close">✕</button><button class="pf-prev">‹</button><img><button class="pf-next">›</button><div class="pf-count"></div>`;
+  document.body.appendChild(ov);
+  const img = ov.querySelector('img');
+  const render = () => { img.src = photos[i]; ov.querySelector('.pf-count').textContent = `${i+1}/${photos.length}`; };
+  render();
+  ov.querySelector('.pf-close').onclick = () => ov.remove();
+  ov.querySelector('.pf-prev').onclick = (e) => { e.stopPropagation(); i = (i-1+photos.length)%photos.length; render(); };
+  ov.querySelector('.pf-next').onclick = (e) => { e.stopPropagation(); i = (i+1)%photos.length; render(); };
+  ov.onclick = (e) => { if (e.target === ov) ov.remove(); };
 }
 function viewAudios(audios) {
   if (!audios.length) return;
