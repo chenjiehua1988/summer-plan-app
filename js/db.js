@@ -131,10 +131,11 @@ export async function deleteTemplate(id) {
   const { error } = await supabase.from('task_templates').delete().eq('id', id);
   if (error) throw error;
 }
-// 改任务：patch = {title, subject, default_minutes, points, active}；tagIds 若提供则重置标签
+// 改任务：patch 含任务字段；tagIds 若提供则重置标签（tagIds 不是表字段，update 前剔除）
 export async function updateTemplate(id, patch, tagIds) {
+  const { tagIds: _omit, ...fields } = patch;  // 剔除 tagIds，不传给表
   const { data, error } = await supabase
-    .from('task_templates').update(patch).eq('id', id).select().single();
+    .from('task_templates').update(fields).eq('id', id).select().single();
   if (error) throw error;
   if (tagIds) {
     // 重置标签：先删全部，再加新的
