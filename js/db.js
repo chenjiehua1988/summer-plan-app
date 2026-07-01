@@ -313,7 +313,7 @@ export async function verifyRecord(id, status, note) {
   // 写验收操作流水
   try {
     await supabase.from('verify_logs').insert({
-      family_id: state.family.id, record_id: id, child_id: data.child_id,
+      family_id: state.family.id, record_id: id, child_id: data.child_id, title: data.title,
       action: status === 'verified' ? 'pass' : 'reject',
       note: note || null, operator: actorName()
     });
@@ -324,8 +324,8 @@ export async function verifyRecord(id, status, note) {
 // 撤销验收：verified → rejected（打回重写），删除该 record 的加分流水（净扣回分）
 // 孩子看到"被打回"知道要重做；重做打卡后再验收，判重触发器看无流水会重新加
 export async function revokeVerify(id) {
-  // 查 child_id 用于写流水
-  const { data: rec } = await supabase.from('daily_records').select('child_id').eq('id', id).single();
+  // 查 child_id/title 用于写流水
+  const { data: rec } = await supabase.from('daily_records').select('child_id,title').eq('id', id).single();
   // 删除该 record 的加分流水（delta>0）
   const { error: e1 } = await supabase.from('point_ledger')
     .delete().eq('source_record_id', id).gt('delta', 0);
@@ -337,7 +337,7 @@ export async function revokeVerify(id) {
   // 写撤销流水
   try {
     await supabase.from('verify_logs').insert({
-      family_id: state.family.id, record_id: id, child_id: rec?.child_id || data.child_id,
+      family_id: state.family.id, record_id: id, child_id: rec?.child_id || data.child_id, title: rec?.title || data.title,
       action: 'revoke', note: '撤销验收，打回重写', operator: actorName()
     });
   } catch (e) { console.warn('verify_log failed', e.message); }

@@ -147,8 +147,9 @@ export async function renderStats(view) {
 
     <div class="section-title">打卡明细</div>
     <div class="dayoff-range-row" style="align-items:center">
-      <label style="flex:0 0 auto;color:var(--muted);font-size:13px">选日期</label>
-      <input type="date" id="detailDate" value="${today}" style="flex:1;padding:9px;border:1px solid var(--line);border-radius:8px;font-size:14px">
+      <label style="flex:0 0 auto;color:var(--muted);font-size:13px">日期</label>
+      <input type="date" id="detailDate" value="${today}" style="flex:0 0 auto;padding:9px;border:1px solid var(--line);border-radius:8px;font-size:14px">
+      <input type="text" id="detailFilter" placeholder="按任务名过滤" style="flex:1;padding:9px;border:1px solid var(--line);border-radius:8px;font-size:14px">
       <button class="btn-primary btn-sm" id="btnDetail">查看</button>
     </div>
     <div id="detailArea"></div>
@@ -156,14 +157,21 @@ export async function renderStats(view) {
     <div class="section-title">验收操作明细</div>
     <div id="verifyArea"></div>
   `;
-  // 默认加载今天
-  loadDetail(today);
-  view.querySelector('#btnDetail').onclick = () => loadDetail(view.querySelector('#detailDate').value);
-  async function loadDetail(date) {
+  // 查看：同时刷新打卡明细和验收明细（按任务名过滤）
+  const refresh = () => {
+    const d = view.querySelector('#detailDate').value;
+    const kw = view.querySelector('#detailFilter').value.trim().toLowerCase();
+    loadDetail(d, kw); loadVerify(d, kw);
+  };
+  refresh();
+  view.querySelector('#btnDetail').onclick = refresh;
+  view.querySelector('#detailFilter').onkeydown = (e) => { if (e.key === 'Enter') refresh(); };
+  async function loadDetail(date, kw) {
     const area = view.querySelector('#detailArea');
     area.innerHTML = `<div class="loading">加载中…</div>`;
     let list = [];
     try { list = await db.fetchCheckinsByDate(state.currentChildId, date); } catch (e) {}
+    if (kw) list = list.filter(c => (c.title||'').toLowerCase().includes(kw));
     if (!list.length) { area.innerHTML = `<div class="empty">${date} 没有打卡记录。</div>`; return; }
     area.innerHTML = list.map(c => `
       <div class="checkin-item">
@@ -181,26 +189,23 @@ export async function renderStats(view) {
     });
   }
 
-  // 验收操作明细（用同一日期）
+  // 验收操作明细（用同一日期+任务名过滤）
   const vArea = view.querySelector('#verifyArea');
-  async function loadVerify(date) {
+  async function loadVerify(date, kw) {
     vArea.innerHTML = `<div class="loading">加载中…</div>`;
     let list = [];
     try { list = await db.fetchVerifyLogsByDate(state.currentChildId, date); } catch (e) {}
+    if (kw) list = list.filter(l => (l.title||'').toLowerCase().includes(kw));
     if (!list.length) { vArea.innerHTML = `<div class="empty">${date} 没有验收操作。</div>`; return; }
     const actionText = { pass: '通过', reject: '打回', revoke: '撤销' };
     const actionColor = { pass: 'badge-ok', reject: 'badge-no', revoke: 'badge-mid' };
     vArea.innerHTML = list.map(l => `
       <div class="checkin-item">
         <div class="checkin-head"><span class="checkin-time">${hm(l.created_at)} · ${l.operator||''}</span> <span class="badge ${actionColor[l.action]||''}">${actionText[l.action]||l.action}</span></div>
+        ${l.title ? `<div class="checkin-note" style="font-weight:600">${l.title}</div>` : ''}
         ${l.note ? `<div class="checkin-note">${l.note}</div>` : ''}
       </div>`).join('');
   }
-  loadVerify(today);
-  view.querySelector('#btnDetail').onclick = () => {
-    const d = view.querySelector('#detailDate').value;
-    loadDetail(d); loadVerify(d);
-  };
 }
 
 function calcStreak(okDates) {
