@@ -152,6 +152,9 @@ export async function renderStats(view) {
       <button class="btn-primary btn-sm" id="btnDetail">查看</button>
     </div>
     <div id="detailArea"></div>
+
+    <div class="section-title">验收操作明细</div>
+    <div id="verifyArea"></div>
   `;
   // 默认加载今天
   loadDetail(today);
@@ -177,6 +180,27 @@ export async function renderStats(view) {
       document.body.appendChild(o);
     });
   }
+
+  // 验收操作明细（用同一日期）
+  const vArea = view.querySelector('#verifyArea');
+  async function loadVerify(date) {
+    vArea.innerHTML = `<div class="loading">加载中…</div>`;
+    let list = [];
+    try { list = await db.fetchVerifyLogsByDate(state.currentChildId, date); } catch (e) {}
+    if (!list.length) { vArea.innerHTML = `<div class="empty">${date} 没有验收操作。</div>`; return; }
+    const actionText = { pass: '通过', reject: '打回', revoke: '撤销' };
+    const actionColor = { pass: 'badge-ok', reject: 'badge-no', revoke: 'badge-mid' };
+    vArea.innerHTML = list.map(l => `
+      <div class="checkin-item">
+        <div class="checkin-head"><span class="checkin-time">${hm(l.created_at)} · ${l.operator||''}</span> <span class="badge ${actionColor[l.action]||''}">${actionText[l.action]||l.action}</span></div>
+        ${l.note ? `<div class="checkin-note">${l.note}</div>` : ''}
+      </div>`).join('');
+  }
+  loadVerify(today);
+  view.querySelector('#btnDetail').onclick = () => {
+    const d = view.querySelector('#detailDate').value;
+    loadDetail(d); loadVerify(d);
+  };
 }
 
 function calcStreak(okDates) {

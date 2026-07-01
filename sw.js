@@ -1,5 +1,5 @@
 // Service Worker —— 缓存 app 外壳，支持离线打开
-const CACHE = 'summer-plan-v8';
+const CACHE = 'summer-plan-v9';
 const ASSETS = [
   './',
   './index.html',

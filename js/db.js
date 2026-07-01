@@ -305,16 +305,27 @@ async function getCachedRecordsById(id) {
   return all.find(r => r.id === id);
 }
 
-// 验收：把记录置为 verified/rejected（仅父母）
+// 验收：把记录置为 verified/rejected（仅父母），写一条验收操作流水
 export async function verifyRecord(id, status, note) {
   const patch = { status, note: note ?? null,
     verified_at: new Date().toISOString(), verified_by: actorName() };
-  return updateRecord(id, patch); // 复用在线/离线逻辑；verified 触发器在服务端自动加分
+  const data = await updateRecord(id, patch);
+  // 写验收操作流水
+  try {
+    await supabase.from('verify_logs').insert({
+      family_id: state.family.id, record_id: id, child_id: data.child_id,
+      action: status === 'verified' ? 'pass' : 'reject',
+      note: note || null, operator: actorName()
+    });
+  } catch (e) { console.warn('verify_log failed', e.message); }
+  return data;
 }
 
 // 撤销验收：verified → rejected（打回重写），删除该 record 的加分流水（净扣回分）
 // 孩子看到"被打回"知道要重做；重做打卡后再验收，判重触发器看无流水会重新加
 export async function revokeVerify(id) {
+  // 查 child_id 用于写流水
+  const { data: rec } = await supabase.from('daily_records').select('child_id').eq('id', id).single();
   // 删除该 record 的加分流水（delta>0）
   const { error: e1 } = await supabase.from('point_ledger')
     .delete().eq('source_record_id', id).gt('delta', 0);
@@ -322,7 +333,15 @@ export async function revokeVerify(id) {
   // 状态置 rejected（打回），清验收字段
   const patch = { status: 'rejected', verified_at: null, verified_by: null,
     updated_at: new Date().toISOString() };
-  return updateRecord(id, patch);
+  const data = await updateRecord(id, patch);
+  // 写撤销流水
+  try {
+    await supabase.from('verify_logs').insert({
+      family_id: state.family.id, record_id: id, child_id: rec?.child_id || data.child_id,
+      action: 'revoke', note: '撤销验收，打回重写', operator: actorName()
+    });
+  } catch (e) { console.warn('verify_log failed', e.message); }
+  return data;
 }
 
 // ---------- 生活项 ----------
@@ -612,6 +631,18 @@ export async function fetchCheckins(recordId) {
 export async function fetchCheckinsByDate(childId, date) {
   const { data, error } = await supabase.from('checkins').select('*')
     .eq('child_id', childId).eq('date', date).order('created_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+// ---------- 验收操作流水 ----------
+// 取某孩子某天所有验收操作（按时间倒序）
+export async function fetchVerifyLogsByDate(childId, date) {
+  const { data, error } = await supabase.from('verify_logs').select('*')
+    .eq('child_id', childId)
+    .gte('created_at', date + 'T00:00:00')
+    .lte('created_at', date + 'T23:59:59')
+    .order('created_at', { ascending: false });
   if (error) throw error;
   return data || [];
 }
