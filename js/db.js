@@ -232,17 +232,23 @@ export async function ensureDailyRecords(childId, date, planId) {
   if (pid) q = q.eq('plan_id', pid); else q = q.is('plan_id', null);
   const { data: existing, error } = await q;
   if (error) throw error;
-  if (existing && existing.length) {
+  // 生成：必须有当前周期
+  if (!pid) return existing || [];
+  const templates = await fetchTemplates(pid, childId);
+  const dow = new Date(date + 'T00:00:00').getDay();
+  const active = templates.filter(t => t.active && inSchedule(t, date, dow));
+  // 已有记录的 task_id 集合
+  const existingTaskIds = new Set((existing || []).map(r => r.task_id));
+  // 找出有模板但没记录的任务（新增的）
+  const missing = active.filter(t => !existingTaskIds.has(t.id));
+  if (existing && existing.length && !missing.length) {
+    // 都有了，直接返回
     await cacheRecords(existing);
     return existing;
   }
-  // 生成：必须有当前周期
-  if (!pid) return [];
-  const templates = await fetchTemplates(pid, childId);
-  // 过滤：active 且 今天在起止范围内 且 今天周几在 weekdays 里
-  const dow = new Date(date + 'T00:00:00').getDay(); // 0=周日..6=周六
-  const active = templates.filter(t => t.active && inSchedule(t, date, dow));
-  if (!active.length) return [];
+  // 补生成缺失的（新增任务）
+  const toGen = (existing && existing.length) ? missing : active;
+  if (!toGen.length && !existing?.length) return [];
   // 是否假期
   let isDayOff = false;
   try {
@@ -253,16 +259,17 @@ export async function ensureDailyRecords(childId, date, planId) {
   // 取标签名映射，写入 tags 快照
   const allTags = await fetchTags();
   const tagName = id => (allTags.find(tg => tg.id === id) || {}).name;
-  const rows = active.map(t => ({
+  const rows = toGen.map(t => ({
     family_id: state.family.id, plan_id: pid, child_id: childId, task_id: t.id, date,
     subject: t.subject, title: t.title, points: t.points,
     status: isDayOff ? 'skipped' : 'pending',
     tags: (t.tagIds || []).map(tagName).filter(Boolean)
   }));
-  const { data, error: ie } = await supabase.from('daily_records').insert(rows).select();
+  const { data: newRecs, error: ie } = await supabase.from('daily_records').insert(rows).select();
   if (ie) throw ie;
-  await cacheRecords(data || []);
-  return data || [];
+  const all = [...(existing || []), ...(newRecs || [])];
+  await cacheRecords(all);
+  return all;
 }
 
 // 拉取某孩子一段日期范围的记录（统计用）
