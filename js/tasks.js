@@ -174,9 +174,13 @@ function taskRow(r) {
 }
 
 // 打卡面板：底部抽屉，备注+拍照+录音+完成（都是可选）
+// 打开时带出上次的备注/照片/录音（daily_records 快照），可增删改
 function openCheckinPanel(id, r, records, el) {
-  // 状态：待上传的照片文件、录音 blob
-  const st = { photoFiles: [], audioBlobs: [], recorder: null, recMime: 'webm', recording: false, recTimer: null, recSec: 0 };
+  // 状态：existingXxx=已上传的URL（上次带的）；photoFiles/audioBlobs=新加的
+  const st = {
+    existingPhotos: [...(r.photos || [])], existingAudios: [...(r.audios || [])],
+    photoFiles: [], audioBlobs: [], recorder: null, recMime: 'webm', recording: false, recTimer: null, recSec: 0
+  };
 
   const overlay = document.createElement('div');
   overlay.className = 'checkin-overlay';
@@ -208,12 +212,19 @@ function openCheckinPanel(id, r, records, el) {
   $('#ckClose').onclick = close;
 
   const renderPicked = () => {
-    const ph = st.photoFiles.map((f, i) => `<span class="pick-chip">📷${i+1}<b data-rm-photo="${i}">×</b></span>`).join('');
+    // 已有的照片/录音（带删除×，点图可看）
+    const eph = st.existingPhotos.map((u, i) => `<span class="pick-chip">📷<b data-rm-ephoto="${i}">×</b></span>`).join('');
+    const eau = st.existingAudios.map((u, i) => `<span class="pick-chip">🎙<b data-rm-eaudio="${i}">×</b></span>`).join('');
+    // 新加的
+    const ph = st.photoFiles.map((f, i) => `<span class="pick-chip">📷新<b data-rm-photo="${i}">×</b></span>`).join('');
     const au = st.audioBlobs.map((a, i) => `<span class="pick-chip">🎙${a.sec}秒<b data-rm-audio="${i}">×</b></span>`).join('');
-    $('#ckPicked').innerHTML = ph + au;
+    $('#ckPicked').innerHTML = eph + eau + ph + au;
+    overlay.querySelectorAll('[data-rm-ephoto]').forEach(b => b.onclick = () => { st.existingPhotos.splice(+b.dataset.rmEphoto,1); renderPicked(); });
+    overlay.querySelectorAll('[data-rm-eaudio]').forEach(b => b.onclick = () => { st.existingAudios.splice(+b.dataset.rmEaudio,1); renderPicked(); });
     overlay.querySelectorAll('[data-rm-photo]').forEach(b => b.onclick = () => { st.photoFiles.splice(+b.dataset.rmPhoto,1); renderPicked(); });
     overlay.querySelectorAll('[data-rm-audio]').forEach(b => b.onclick = () => { st.audioBlobs.splice(+b.dataset.rmAudio,1); renderPicked(); });
   };
+  renderPicked(); // 初始显示已有的
 
   // 拍照/选图
   $('#ckPhoto').onclick = () => {
@@ -287,25 +298,28 @@ function openCheckinPanel(id, r, records, el) {
     const btn = $('#ckSubmit');
     btn.disabled = true; btn.textContent = '提交中…';
     try {
-      // 上传照片/录音
-      let photoUrls = [], audioUrls = [];
+      // 上传新照片/录音
+      let newPhotos = [], newAudios = [];
       if (st.photoFiles.length) {
         toast(`上传 ${st.photoFiles.length} 张照片…`);
-        for (const f of st.photoFiles) photoUrls.push(await db.uploadPhoto(id, f));
+        for (const f of st.photoFiles) newPhotos.push(await db.uploadPhoto(id, f));
       }
       if (st.audioBlobs.length) {
         toast(`上传 ${st.audioBlobs.length} 段录音…`);
-        for (const a of st.audioBlobs) audioUrls.push(await db.uploadAudio(id, a.blob, a.ext));
+        for (const a of st.audioBlobs) newAudios.push(await db.uploadAudio(id, a.blob, a.ext));
       }
-      // 写一条 checkins 流水（含备注/照片/录音），同时更新 daily_records 快照
-      await db.addCheckin(r, { note, photos: photoUrls, audios: audioUrls });
+      // 合并：已有的（没删的）+ 新传的
+      const allPhotos = [...st.existingPhotos, ...newPhotos];
+      const allAudios = [...st.existingAudios, ...newAudios];
+      // 写一条 checkins 流水（含合并后的全部），同时更新 daily_records 快照
+      await db.addCheckin(r, { note, photos: allPhotos, audios: allAudios });
       // 更新 daily_records 状态为 done（若已 verified 则不改状态，但仍记录本次打卡）
       if (r.status !== 'verified') {
         const patch = { status: 'done', completed_at: new Date().toISOString(), completed_by: actorName() };
         await db.updateRecord(id, patch);
         Object.assign(r, patch);
       }
-      r.note = note || null; r.photos = photoUrls; r.audios = audioUrls;
+      r.note = note || null; r.photos = allPhotos; r.audios = allAudios;
       toast('已打卡 ✓');
       overlay.remove();
       renderToday(document.getElementById('view'));
