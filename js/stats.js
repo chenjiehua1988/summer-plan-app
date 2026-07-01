@@ -144,7 +144,39 @@ export async function renderStats(view) {
             <div class="pc-meta">${c.v}/${c.t} 已验收</div>
           </div>`).join('')}
       </div>` : ''}
+
+    <div class="section-title">打卡明细</div>
+    <div class="dayoff-range-row" style="align-items:center">
+      <label style="flex:0 0 auto;color:var(--muted);font-size:13px">选日期</label>
+      <input type="date" id="detailDate" value="${today}" style="flex:1;padding:9px;border:1px solid var(--line);border-radius:8px;font-size:14px">
+      <button class="btn-primary btn-sm" id="btnDetail">查看</button>
+    </div>
+    <div id="detailArea"></div>
   `;
+  // 默认加载今天
+  loadDetail(today);
+  view.querySelector('#btnDetail').onclick = () => loadDetail(view.querySelector('#detailDate').value);
+  async function loadDetail(date) {
+    const area = view.querySelector('#detailArea');
+    area.innerHTML = `<div class="loading">加载中…</div>`;
+    let list = [];
+    try { list = await db.fetchCheckinsByDate(state.currentChildId, date); } catch (e) {}
+    if (!list.length) { area.innerHTML = `<div class="empty">${date} 没有打卡记录。</div>`; return; }
+    area.innerHTML = list.map(c => `
+      <div class="checkin-item">
+        <div class="checkin-head"><span class="checkin-time">${(c.created_at||'').slice(11,16)} · ${c.created_by||''}</span> <span class="subj subj-${c.title?'':''}" style="background:#aaa">${c.title||''}</span></div>
+        ${c.title ? `<div class="checkin-note" style="font-weight:600">${c.title}</div>` : ''}
+        ${c.note ? `<div class="checkin-note">${c.note}</div>` : ''}
+        ${(c.photos||[]).length ? `<div class="checkin-media">${(c.photos||[]).map(u=>`<img src="${u}" data-full="${u}">`).join('')}</div>` : ''}
+        ${(c.audios||[]).length ? `<div>${(c.audios||[]).map(u=>`<audio controls src="${u}" style="width:100%;margin:4px 0"></audio>`).join('')}</div>` : ''}
+      </div>`).join('');
+    area.querySelectorAll('.checkin-media img').forEach(img => img.onclick = () => {
+      const o = document.createElement('div'); o.className='photo-overlay';
+      o.innerHTML = `<div class="photo-bar"><span>照片</span><button class="btn-ghost btn-sm">关闭</button></div><div class="photo-grid"><img src="${img.dataset.full}"></div>`;
+      o.onclick=e=>{if(e.target===o||e.target.tagName==='BUTTON')o.remove()};
+      document.body.appendChild(o);
+    });
+  }
 }
 
 function calcStreak(okDates) {

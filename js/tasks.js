@@ -65,10 +65,13 @@ export async function renderToday(view) {
     const id = el.dataset.id;
     const r = records.find(x => x.id === id);
     el.querySelector('.check')?.addEventListener('click', () => onToggle(id, el, records));
-    // 打卡拍照/备注：点任务体（已完成的）展开
-    el.querySelector('.task-act')?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      openCheckinPanel(id, r, records, el);
+    // 打卡/改/历史 按钮
+    el.querySelectorAll('.task-act').forEach(b => {
+      b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (b.dataset.history) openHistoryPanel(r);
+        else openCheckinPanel(id, r, records, el);
+      });
     });
     // 查看已有照片/录音
     el.querySelector('.task-photos')?.addEventListener('click', (e) => {
@@ -77,6 +80,33 @@ export async function renderToday(view) {
       else viewPhotos(r.photos || []);
     });
   });
+}
+
+// 历史打卡记录面板
+async function openHistoryPanel(r) {
+  const overlay = document.createElement('div');
+  overlay.className = 'photo-overlay';
+  overlay.innerHTML = `<div class="photo-bar"><span>${r.title} · 打卡历史</span><button class="btn-ghost btn-sm">关闭</button></div><div class="loading">加载中…</div>`;
+  overlay.onclick = (e) => { if (e.target === overlay || e.target.tagName === 'BUTTON') overlay.remove(); };
+  document.body.appendChild(overlay);
+  let list = [];
+  try { list = await db.fetchCheckins(r.id); } catch (e) {}
+  if (!list.length) {
+    // 回退显示 daily_records 快照
+    overlay.querySelector('.loading').outerHTML = `<div class="empty">暂无历史打卡记录。</div>`;
+    return;
+  }
+  const html = list.map(c => `
+    <div class="checkin-item">
+      <div class="checkin-head">
+        <span class="checkin-time">${(c.created_at||'').slice(5,16).replace('T',' ')} · ${c.created_by||''}</span>
+      </div>
+      ${c.note ? `<div class="checkin-note">${c.note}</div>` : ''}
+      ${(c.photos||[]).length ? `<div class="checkin-media">${(c.photos||[]).map(u=>`<img src="${u}" data-full="${u}">`).join('')}</div>` : ''}
+      ${(c.audios||[]).length ? `<div>${(c.audios||[]).map(u=>`<audio controls src="${u}" style="width:100%;margin:4px 0"></audio>`).join('')}</div>` : ''}
+    </div>`).join('');
+  overlay.querySelector('.loading').outerHTML = `<div class="checkin-list">${html}</div>`;
+  overlay.querySelectorAll('.checkin-media img').forEach(img => img.onclick = () => viewPhotos([img.dataset.full]));
 }
 
 function bindDayOff(view, childId, date, dayOff) {
@@ -113,12 +143,14 @@ function taskRow(r) {
   }).join('');
   const photos = r.photos || [];
   const photosHtml = photos.length
-    ? `<span class="task-photos link">📷 ${photos.length}</span>` : '';
+    ? `<span class="task-photos link" data-viewphoto="1">📷 ${photos.length}</span>` : '';
   const audios = r.audios || [];
   const audiosHtml = audios.length
     ? `<span class="task-photos link" data-viewaudio="1">🎙 ${audios.length}</span>` : '';
-  const actBtn = (!skipped && !verified)
-    ? `<button class="task-act btn-ghost btn-sm">${done ? '改' : '记'}</button>` : '';
+  let actBtn;
+  if (skipped) actBtn = '';
+  else if (verified) actBtn = `<button class="task-act btn-ghost btn-sm" data-history="${r.id}">历史</button>`;
+  else actBtn = `<button class="task-act btn-ghost btn-sm">${done ? '改' : '记'}</button>${done ? `<button class="task-act btn-ghost btn-sm" data-history="${r.id}" style="margin-right:0">历史</button>` : ''}`;
   return `
     <li class="task-item ${done ? 'is-done' : ''} ${skipped ? 'is-skip' : ''}" data-id="${r.id}">
       <button class="check ${done ? 'checked' : ''} ${skipped ? 'skip' : ''}" aria-label="完成">${done ? '✓' : skipped ? '—' : ''}</button>
@@ -254,24 +286,25 @@ function openCheckinPanel(id, r, records, el) {
     const btn = $('#ckSubmit');
     btn.disabled = true; btn.textContent = '提交中…';
     try {
-      const patch = { status: 'done', note: note || null,
-        completed_at: new Date().toISOString(), completed_by: actorName() };
-      await db.updateRecord(id, patch);
-      Object.assign(r, patch);
+      // 上传照片/录音
+      let photoUrls = [], audioUrls = [];
       if (st.photoFiles.length) {
         toast(`上传 ${st.photoFiles.length} 张照片…`);
-        const urls = [];
-        for (const f of st.photoFiles) urls.push(await db.uploadPhoto(id, f));
-        const up = await db.appendPhotos(id, urls);
-        r.photos = up.photos;
+        for (const f of st.photoFiles) photoUrls.push(await db.uploadPhoto(id, f));
       }
       if (st.audioBlobs.length) {
         toast(`上传 ${st.audioBlobs.length} 段录音…`);
-        const urls = [];
-        for (const a of st.audioBlobs) urls.push(await db.uploadAudio(id, a.blob, a.ext));
-        const up = await db.appendAudios(id, urls);
-        r.audios = up.audios;
+        for (const a of st.audioBlobs) audioUrls.push(await db.uploadAudio(id, a.blob, a.ext));
       }
+      // 写一条 checkins 流水（含备注/照片/录音），同时更新 daily_records 快照
+      await db.addCheckin(r, { note, photos: photoUrls, audios: audioUrls });
+      // 更新 daily_records 状态为 done（若已 verified 则不改状态，但仍记录本次打卡）
+      if (r.status !== 'verified') {
+        const patch = { status: 'done', completed_at: new Date().toISOString(), completed_by: actorName() };
+        await db.updateRecord(id, patch);
+        Object.assign(r, patch);
+      }
+      r.note = note || null; r.photos = photoUrls; r.audios = audioUrls;
       toast('已打卡 ✓');
       overlay.remove();
       renderToday(document.getElementById('view'));

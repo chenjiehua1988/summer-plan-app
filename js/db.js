@@ -568,6 +568,41 @@ export async function appendAudios(recordId, newUrls) {
   return data;
 }
 
+// ---------- 打卡流水（checkins，1对多） ----------
+// 新增一条打卡记录（含备注/照片/录音），同时更新 daily_records 最近快照
+export async function addCheckin(rec, payload) {
+  // rec: daily_records 行；payload: {note, photos[], audios[], title}
+  const row = {
+    family_id: state.family.id, record_id: rec.id, child_id: rec.child_id,
+    plan_id: rec.plan_id || state.currentPlanId, task_id: rec.task_id || null,
+    date: rec.date, title: payload.title || rec.title,
+    note: payload.note || null, photos: payload.photos || [], audios: payload.audios || [],
+    created_by: actorName()
+  };
+  const { data, error } = await supabase.from('checkins').insert(row).select().single();
+  if (error) throw error;
+  // 更新 daily_records 最近快照（note/photos/audios）
+  await supabase.from('daily_records').update({
+    note: payload.note || null, photos: payload.photos || [], audios: payload.audios || [],
+    updated_at: new Date().toISOString()
+  }).eq('id', rec.id);
+  return data;
+}
+// 取某任务（record）当天所有打卡记录，倒序
+export async function fetchCheckins(recordId) {
+  const { data, error } = await supabase.from('checkins').select('*')
+    .eq('record_id', recordId).order('created_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+// 取某孩子某天所有打卡记录（按孩子+日期）
+export async function fetchCheckinsByDate(childId, date) {
+  const { data, error } = await supabase.from('checkins').select('*')
+    .eq('child_id', childId).eq('date', date).order('created_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
 // ---------- 兑换申请 ----------
 
 // 孩子发起申请
