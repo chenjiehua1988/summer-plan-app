@@ -157,6 +157,8 @@ export async function renderStats(view) {
     <div class="section-title">验收操作明细</div>
     <div id="verifyArea"></div>
   `;
+  // 验收操作明细容器（提前声明，避免 TDZ）
+  const vArea = view.querySelector('#verifyArea');
   // 查看：同时刷新打卡明细和验收明细（按任务名过滤）
   const refresh = () => {
     const d = view.querySelector('#detailDate').value;
@@ -190,7 +192,6 @@ export async function renderStats(view) {
   }
 
   // 验收操作明细（用同一日期+任务名过滤）
-  const vArea = view.querySelector('#verifyArea');
   async function loadVerify(date, kw) {
     vArea.innerHTML = `<div class="loading">加载中…</div>`;
     let list = [];
