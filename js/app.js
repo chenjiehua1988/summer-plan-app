@@ -9,6 +9,7 @@ import { renderVerify } from './verify.js';
 import { renderStats } from './stats.js';
 import { renderLife } from './life.js';
 import { renderPoints, refreshPointBadge } from './points.js';
+import { enablePush, disablePush, isPushEnabled } from './push.js';
 
 const view = document.getElementById('view');
 const authScreen = document.getElementById('authScreen');
@@ -290,6 +291,12 @@ function renderSetup(view) {
       <div class="row-hint">家长角色登录时已固定，不可切换。退出后可换另一个家长身份登录。</div>
     </div>
 
+    <div class="section-title">通知设置</div>
+    <div class="card">
+      <div class="row-line"><span>打卡通知</span><button class="btn-ghost btn-sm" id="btnPushToggle">开启</button></div>
+      <div class="row-hint">开启后，孩子提交打卡，本设备会收到系统通知（需添加到主屏幕 + 授权通知）。</div>
+    </div>
+
     <div class="section-title">兑换申请</div>
     <div class="card" id="redeemReqCard"></div>
 
@@ -347,6 +354,7 @@ function renderSetup(view) {
   `;
 
   renderRedeemReqCard();
+  initPushToggle();
   renderPlansCard();
   renderPlanTypesCard();
   fillPlanTypeSelect();
@@ -439,6 +447,18 @@ function renderSetup(view) {
     applyModeUI();
     fillChildSwitcher(); fillPlanSwitcher();
     showAuth();
+  };
+}
+
+function initPushToggle() {
+  const btn = document.getElementById('btnPushToggle');
+  if (!btn) return;
+  // 初始状态
+  isPushEnabled().then(on => { btn.textContent = on ? '关闭' : '开启'; });
+  btn.onclick = async () => {
+    const on = await isPushEnabled();
+    if (on) { await disablePush(); btn.textContent = '开启'; }
+    else { const ok = await enablePush(); if (ok) btn.textContent = '关闭'; }
   };
 }
 

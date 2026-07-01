@@ -1,5 +1,5 @@
 // Service Worker —— 缓存 app 外壳，支持离线打开
-const CACHE = 'summer-plan-v7';
+const CACHE = 'summer-plan-v8';
 const ASSETS = [
   './',
   './index.html',
@@ -15,6 +15,7 @@ const ASSETS = [
   './js/stats.js',
   './js/app.js',
   './js/photo-viewer.js',
+  './js/push.js',
   './icons/icon-192.png',
   './icons/icon-512.png'
 ];
@@ -51,5 +52,32 @@ self.addEventListener('fetch', (e) => {
         return res;
       })
       .catch(() => caches.match(req).then((r) => r || caches.match('./index.html')))
+  );
+});
+
+// ---------- Web Push ----------
+self.addEventListener('push', (e) => {
+  let data = { title: '学习计划', body: '有新动态' };
+  try { data = JSON.parse(e.data.text()); } catch (err) {}
+  e.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: './icons/icon-192.png',
+      badge: './icons/icon-192.png',
+      data: { url: './index.html' }
+    })
+  );
+});
+
+// 点通知打开 app
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      for (const c of clients) {
+        if ('focus' in c) return c.focus();
+      }
+      if (self.clients.openWindow) return self.clients.openWindow('./index.html');
+    })
   );
 });
