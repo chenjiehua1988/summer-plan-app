@@ -1,7 +1,7 @@
 // ============================================================
 // app.js：路由 / 导航 / 初始化
 // ============================================================
-import { state, toast, todayStr, segHtml, bindSeg, mdhm } from './supabase.js';
+import { supabase, state, toast, todayStr, segHtml, bindSeg, mdhm } from './supabase.js';
 import * as auth from './auth.js';
 import * as db from './db.js';
 import { renderToday, renderTemplates } from './tasks.js';
@@ -646,9 +646,15 @@ function renderChildrenCard() {
     : `<div class="empty">还没有孩子档案。</div>`;
   card.querySelectorAll('[data-del-child]').forEach(b => {
     b.onclick = async () => {
-      if (!confirm('删除该孩子及其所有任务记录？')) return;
-      try { await db.removeChild(b.dataset.delChild); toast('已删除'); fillChildSwitcher(); renderChildrenCard(); }
-      catch (e) { toast('删除失败：' + e.message); }
+      if (!confirm('删除该孩子及其所有任务记录？此操作不可恢复！')) return;
+      // 验证家庭密码
+      const pwd = prompt('请输入家庭密码确认删除：');
+      if (pwd === null) return;
+      try {
+        const { data, error } = await supabase.rpc('pw_match', { p_name: state.family.name, p_pw: pwd });
+        if (error || !data) { toast('密码错误，删除取消'); return; }
+        await db.removeChild(b.dataset.delChild); toast('已删除'); fillChildSwitcher(); renderChildrenCard();
+      } catch (e) { toast('删除失败：' + e.message); }
     };
   });
 }
