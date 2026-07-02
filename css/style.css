@@ -137,6 +137,19 @@ textarea.checkin-note, textarea.vnote { width: 100%; padding: 9px; border: 1px s
 .tmpl-group { background: var(--card); border-radius: 12px; padding: 4px 14px; margin-bottom: 10px; box-shadow: var(--shadow); }
 .tmpl-group-head { padding: 8px 0 4px; }
 
+/* 任务清单卡片网格 */
+#tmplArea { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+@media (max-width: 480px) { #tmplArea { grid-template-columns: repeat(2, 1fr); } }
+.tmpl-card { background: var(--card); border-radius: 12px; padding: 10px 12px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 6px; }
+.tmpl-card-title { font-weight: 700; font-size: 14px; line-height: 1.3; }
+.tmpl-card-tags { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.tmpl-card-tags .subj { margin: 0; }
+.tmpl-card-sched { font-size: 11px; color: var(--primary); font-weight: 600; }
+.tmpl-card-foot { display: flex; justify-content: space-between; align-items: center; margin-top: auto; }
+.tmpl-card-info { font-size: 11px; color: var(--muted); }
+.tmpl-card-btns { display: flex; gap: 4px; }
+.tmpl-card-btns .btn-sm { padding: 4px 8px; font-size: 12px; }
+
 /* 积分 */
 .balance-card {
   background: linear-gradient(135deg, var(--primary), #6a5cff);

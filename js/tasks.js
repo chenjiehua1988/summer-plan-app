@@ -599,13 +599,16 @@ function tmplRow(t, tags) {
   }
   const schedHtml = sched.length ? `<span class="note" style="color:var(--primary)">📅 ${sched.join(' · ')}</span>` : '';
   return `
-    <div class="tmpl-row">
-      <div class="tmpl-name">
-        ${t.title} <small>${t.default_minutes}分·${t.points}分</small> ${activeTag}
-        <div style="margin-top:3px">${tagHtml}<span class="subj subj-${t.subject}" style="margin-left:4px">${t.subject}</span></div>
-        ${schedHtml ? `<div style="margin-top:3px">${schedHtml}</div>` : ''}
+    <div class="tmpl-card">
+      <div class="tmpl-card-title">${t.title} ${activeTag}</div>
+      <div class="tmpl-card-tags">${tagHtml}<span class="subj subj-${t.subject}">${t.subject}</span></div>
+      ${schedHtml ? `<div class="tmpl-card-sched">${schedHtml}</div>` : ''}
+      <div class="tmpl-card-foot">
+        <span class="tmpl-card-info">${t.default_minutes}分 · ${t.points}积分</span>
+        <div class="tmpl-card-btns">
+          <button class="btn-ghost btn-sm" data-edit="${t.id}">改</button>
+          <button class="btn-ghost btn-sm" data-del="${t.id}">删</button>
+        </div>
       </div>
-      <button class="btn-ghost btn-sm" data-edit="${t.id}">改</button>
-      <button class="btn-ghost btn-sm" data-del="${t.id}">删除</button>
     </div>`;
 }
