@@ -340,10 +340,12 @@ function renderSetup(view) {
     <div class="section-title">兑换商店目录</div>
     <div class="card" id="shopCard"></div>
     <div class="child-add">
-      <input id="sIcon" type="text" placeholder="图标" style="width:48px" value="🎁" />
       <input id="sName" type="text" placeholder="奖励名（如 看一集动画）" class="grow" />
       <input id="sCost" type="number" placeholder="积分" style="width:70px" />
       <button class="btn-primary btn-sm" id="sAdd">添加</button>
+    </div>
+    <div class="icon-picker" id="sIconPicker"></div>
+    <input type="hidden" id="sIcon" value="🎁" />
     </div>
 
     <div class="section-title">孩子档案</div>
@@ -372,6 +374,7 @@ function renderSetup(view) {
   fillPlanTypeSelect();
   renderTagsCard();
   renderShopCard();
+  initShopIconPicker();
   renderChildrenCard();
   const childId = state.currentChildId;
   if (childId && state.currentPlanId) {
@@ -584,6 +587,20 @@ function renderTagsCard() {
     inp.onchange = async () => {
       try { await db.updateTag(inp.dataset.tagColor, { color: inp.value }); const t = state.tags.find(x => x.id === inp.dataset.tagColor); if (t) t.color = inp.value; renderTagsCard(); }
       catch (e) { toast('更新失败：' + e.message); }
+    };
+  });
+}
+
+function initShopIconPicker() {
+  const picker = document.getElementById('sIconPicker');
+  if (!picker) return;
+  const icons = ['🎁','📺','🎮','💰','🍦','🧸','📚','🍟','🍕','🎡','🏊','⚽','🏀','🎨','🚲','🎟️','🍫','🥤','🎪','🎯'];
+  picker.innerHTML = icons.map(ic => `<button type="button" class="icon-pick ${ic==='🎁'?'on':''}" data-icon="${ic}">${ic}</button>`).join('');
+  picker.querySelectorAll('.icon-pick').forEach(b => {
+    b.onclick = () => {
+      picker.querySelectorAll('.icon-pick').forEach(x => x.classList.remove('on'));
+      b.classList.add('on');
+      document.getElementById('sIcon').value = b.dataset.icon;
     };
   });
 }
