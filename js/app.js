@@ -166,14 +166,18 @@ function bindAuthUI() {
   tabCreate.onclick = showCreate;
 
   $('btnLogin').onclick = async () => {
+    showLoginLoading();
     try { await auth.loginAsParent($('familyName').value, $('password').value, $('loginRole').value); await maybeEnterApp(); }
     catch (e) { authMsg(e.message); }
+    finally { hideLoginLoading(); }
   };
   $('btnCreateFamily').onclick = async () => {
+    showLoginLoading();
     try {
       await auth.createFamily($('familyName').value, $('password').value, $('loginRole').value);
       await maybeEnterApp();
     } catch (e) { authMsg(e.message); }
+    finally { hideLoginLoading(); }
   };
 
   // 孩子登录
@@ -194,12 +198,16 @@ function bindAuthUI() {
     const fn = $('childFamilyName').value.trim();
     const cid = $('childPick').value;
     if (!fn || !cid) { authMsg('请先查找家庭并选择自己'); return; }
+    showLoginLoading();
     try { await auth.loginAsChild(fn, cid); await maybeEnterApp(); }
     catch (e) { authMsg(e.message); }
+    finally { hideLoginLoading(); }
   };
 }
 function authMsg(m) { document.getElementById('authMsg').textContent = m; }
 function showAuth() { authScreen.style.display = 'flex'; }
+function showLoginLoading() { const el = document.getElementById('loginLoading'); if (el) el.style.display = 'flex'; }
+function hideLoginLoading() { const el = document.getElementById('loginLoading'); if (el) el.style.display = 'none'; }
 
 // ---------- 周期切换 ----------
 function bindPlanSwitcher() {
