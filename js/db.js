@@ -373,6 +373,16 @@ export async function fetchLedger(childId) {
   if (error) throw error;
   return data || [];
 }
+// 按日期范围查积分流水（用于积分明细，避免一次查全部）
+export async function fetchLedgerRange(childId, fromDate, toDate) {
+  let q = supabase.from('point_ledger').select('*').eq('child_id', childId)
+    .order('created_at', { ascending: false });
+  if (fromDate) q = q.gte('created_at', fromDate + 'T00:00:00');
+  if (toDate) q = q.lte('created_at', toDate + 'T23:59:59');
+  const { data, error } = await q;
+  if (error) throw error;
+  return data || [];
+}
 export async function fetchPointBalance(childId) {
   const rows = await fetchLedger(childId);
   return rows.reduce((s, r) => s + (r.delta || 0), 0);

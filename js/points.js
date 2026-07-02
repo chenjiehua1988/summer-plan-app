@@ -1,7 +1,7 @@
 // ============================================================
 // 积分与奖励：余额、兑换商店、流水、兑换记录
 // ============================================================
-import { state, toast, mdhm } from './supabase.js';
+import { state, toast, mdhm, todayStr } from './supabase.js';
 import * as db from './db.js';
 
 // 更新顶栏积分显示
@@ -19,9 +19,11 @@ export async function refreshPointBadge() {
 export async function renderPoints(container, childId) {
   container.innerHTML = `<div class="loading">加载中…</div>`;
   const isChild = state.mode === 'child';
-  const [ledger, rewards, balance, shop, reqs] = await Promise.all([
-    db.fetchLedger(childId), db.fetchRewards(childId), db.fetchPointBalance(childId), db.fetchShop(),
-    db.fetchRedeemRequestsByChild(childId)
+  const today = todayStr();
+  // 余额查全部（量小），流水默认查当天
+  const [rewards, balance, shop, reqs, todayLedger] = await Promise.all([
+    db.fetchRewards(childId), db.fetchPointBalance(childId), db.fetchShop(),
+    db.fetchRedeemRequestsByChild(childId), db.fetchLedgerRange(childId, today, today)
   ]);
   const onShop = shop.filter(s => s.active);
   const btnLabel = isChild ? '我想兑换' : '兑换';
@@ -58,20 +60,21 @@ export async function renderPoints(container, childId) {
       </ul>` : ''}
 
     <div class="section-title">积分流水</div>
-    ${ledger.length === 0 ? `<div class="empty">还没有积分记录。</div>` : `
-      <ul class="ledger-list">
-        ${ledger.slice(0, 30).map(l => `
-          <li class="ledger-row">
-            <div><div class="ledger-reason">${l.reason}</div>
-            <small>${mdhm(l.created_at)}</small></div>
-            <div class="ledger-delta ${l.delta>0?'plus':'minus'}">${l.delta>0?'+':''}${l.delta}</div>
-          </li>`).join('')}
-      </ul>`}
+    <div class="detail-query-bar">
+      <div class="detail-query-row">
+        <input type="date" id="ledgerFrom" value="${today}" class="detail-date-input">
+        <span style="color:var(--muted);font-size:12px">至</span>
+        <input type="date" id="ledgerTo" value="${today}" class="detail-date-input">
+        <button class="btn-primary btn-sm" id="btnLedger">查询</button>
+      </div>
+      <select id="ledgerFilter" class="detail-filter-select"><option value="">全部</option></select>
+    </div>
+    <div id="ledgerArea"></div>
 
     <div class="section-title">已兑换奖励</div>
     ${rewards.length === 0 ? `<div class="empty">还没有兑换记录。</div>` : `
       <ul class="ledger-list">
-        ${rewards.map(rw => `
+        ${rewards.slice(0, 30).map(rw => `
           <li class="ledger-row">
             <div><div class="ledger-reason">${rw.name}</div>
             <small>${mdhm(rw.redeemed_at)}</small></div>
@@ -79,6 +82,38 @@ export async function renderPoints(container, childId) {
           </li>`).join('')}
       </ul>`}
   `;
+
+  // 流水过滤任务下拉：从当前周期+孩子的任务列表填
+  const filterSel = container.querySelector('#ledgerFilter');
+  try {
+    const tmpls = await db.fetchTemplates(state.currentPlanId, childId);
+    tmpls.forEach(t => { const o = document.createElement('option'); o.value = t.title; o.textContent = t.title; filterSel.appendChild(o); });
+  } catch (e) {}
+
+  // 渲染流水列表
+  function renderLedger(list) {
+    const area = container.querySelector('#ledgerArea');
+    if (!list.length) { area.innerHTML = `<div class="empty">没有积分记录。</div>`; return; }
+    area.innerHTML = `<ul class="ledger-list">${list.map(l => `
+      <li class="ledger-row">
+        <div><div class="ledger-reason">${l.reason}</div>
+        <small>${mdhm(l.created_at)}</small></div>
+        <div class="ledger-delta ${l.delta>0?'plus':'minus'}">${l.delta>0?'+':''}${l.delta}</div>
+      </li>`).join('')}</ul>`;
+  }
+  // 初始显示当天
+  renderLedger(todayLedger);
+  // 查询按钮
+  container.querySelector('#btnLedger').onclick = async () => {
+    const from = container.querySelector('#ledgerFrom').value;
+    const to = container.querySelector('#ledgerTo').value;
+    const kw = filterSel.value;
+    container.querySelector('#ledgerArea').innerHTML = `<div class="loading">加载中…</div>`;
+    let list = [];
+    try { list = await db.fetchLedgerRange(childId, from, to); } catch (e) {}
+    if (kw) list = list.filter(l => (l.reason||'').includes(kw));
+    renderLedger(list);
+  };
 
   container.querySelectorAll('[data-redeem]').forEach(b => {
     b.onclick = async () => {
