@@ -186,7 +186,7 @@ export async function renderStats(view) {
     if (!list.length) { area.innerHTML = `<div class="empty">${date} 没有打卡记录。</div>`; return; }
     area.innerHTML = list.map(c => `
       <div class="checkin-item">
-        <div class="checkin-head"><span class="checkin-time">${hm(c.created_at)} · ${c.created_by||''}</span> <span class="subj" style="background:#aaa">${c.title||''}</span></div>
+        <div class="checkin-head"><span class="checkin-time">${hm(c.created_at)} · ${c.created_by||''}</span></div>
         ${c.title ? `<div class="checkin-note" style="font-weight:600">${c.title}</div>` : ''}
         ${c.note ? `<div class="checkin-note">${c.note}</div>` : ''}
         ${(c.photos||[]).length ? `<div class="checkin-media">${(c.photos||[]).map((u,i)=>`<img src="${u}" data-i="${i}" data-photos='${JSON.stringify(c.photos)}'>`).join('')}</div>` : ''}
