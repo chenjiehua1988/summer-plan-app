@@ -65,7 +65,10 @@ export async function renderToday(view) {
   view.querySelectorAll('.task-item').forEach(el => {
     const id = el.dataset.id;
     const r = records.find(x => x.id === id);
-    el.querySelector('.check')?.addEventListener('click', () => onToggle(id, el, records));
+    // 父母模式下圆圈不可点（打卡是孩子的操作）
+    if (state.mode !== 'parent') {
+      el.querySelector('.check')?.addEventListener('click', () => onToggle(id, el, records));
+    }
     // 打卡/改/历史 按钮
     el.querySelectorAll('.task-act').forEach(b => {
       b.addEventListener('click', (e) => {
@@ -148,9 +151,11 @@ function taskRow(r) {
   const audios = r.audios || [];
   const audiosHtml = audios.length
     ? `<span class="task-photos link" data-viewaudio="1">🎙 ${audios.length}</span>` : '';
+  const isParent = state.mode === 'parent';
   let actBtn;
   if (skipped) actBtn = '';
   else if (verified) actBtn = `<button class="task-act btn-ghost btn-sm" data-history="${r.id}">历史</button>`;
+  else if (isParent) actBtn = done ? `<button class="task-act btn-ghost btn-sm" data-history="${r.id}">历史</button>` : '';
   else actBtn = `<button class="task-act btn-ghost btn-sm">${done ? '改' : '记'}</button>${done ? `<button class="task-act btn-ghost btn-sm" data-history="${r.id}" style="margin-right:0">历史</button>` : ''}`;
   return `
     <li class="task-item ${done ? 'is-done' : ''} ${skipped ? 'is-skip' : ''}" data-id="${r.id}">

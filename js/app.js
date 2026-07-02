@@ -63,9 +63,11 @@ async function maybeEnterApp() {
   fillChildSwitcher();
   fillPlanSwitcher();
   authScreen.style.display = 'none';
-  // child 模式默认进 today；parent 若上次在 verify/setup 则回落 today
-  if (state.mode === 'child' && (state.pendingTab === 'verify' || state.pendingTab === 'setup')) {
+  // 默认页：孩子→今日，父母→验收
+  if (state.mode === 'child') {
     state.pendingTab = 'today';
+  } else {
+    state.pendingTab = state.pendingTab === 'today' ? 'verify' : (state.pendingTab || 'verify');
   }
   switchTab(state.pendingTab || 'today');
 }
