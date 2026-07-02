@@ -225,20 +225,20 @@ textarea.checkin-note, textarea.vnote { width: 100%; padding: 9px; border: 1px s
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; }
 .login-loading .race-track { width: 220px; height: 60px; position: relative; overflow: hidden;
   background: linear-gradient(90deg, #f0f4ff, #e8eeff); border-radius: 30px; }
-.login-loading .racer { position: absolute; top: 50%; transform: translateY(-50%); font-size: 28px; }
-.login-loading .rabbit { animation: rabbitRun 2s infinite ease-in-out; }
-.login-loading .turtle { animation: turtleRun 2s infinite ease-in-out; }
+.login-loading .racer { position: absolute; top: 50%; font-size: 26px; }
+/* 兔子在前，朝右跑（emoji默认朝左，scaleX翻转）+ 弹跳 */
+.login-loading .rabbit { left: 50%; transform: translateY(-50%) scaleX(-1); animation: rabbitRun 1.8s infinite ease-in-out; }
+.login-loading .turtle { left: 10%; transform: translateY(-50%) scaleX(-1); animation: turtleRun 1.8s infinite ease-in-out; }
 @keyframes rabbitRun {
-  0% { left: -10%; transform: translateY(-50%) translateY(-3px); }
-  20% { transform: translateY(-50%) translateY(0); }
-  40% { transform: translateY(-50%) translateY(-3px); }
-  60% { transform: translateY(-50%) translateY(0); }
-  100% { left: 100%; transform: translateY(-50%) translateY(-3px); }
+  0%,100% { left: 55%; transform: translateY(-50%) scaleX(-1) translateY(0); }
+  25% { transform: translateY(-50%) scaleX(-1) translateY(-4px); }
+  50% { left: 70%; transform: translateY(-50%) scaleX(-1) translateY(0); }
+  75% { transform: translateY(-50%) scaleX(-1) translateY(-4px); }
 }
 @keyframes turtleRun {
-  0% { left: -15%; }
-  50% { left: 20%; }
-  100% { left: 60%; }
+  0% { left: 5%; }
+  50% { left: 25%; }
+  100% { left: 35%; }
 }
 .login-loading .loading-text { font-size: 14px; color: var(--muted); font-weight: 600; }
 .login-loading .loading-dots::after { content: ''; animation: dots 1.5s infinite; }
