@@ -117,7 +117,7 @@ function verifyRow(r) {
           ${r.note ? `<span class="note">📝 ${r.note}</span>` : ''}
           ${r.completed_at ? `<span class="note">打卡 ${hm(r.completed_at)}</span>` : ''}
         </div>
-        <input class="vnote" data-for="${r.id}" type="text" placeholder="备注（可选）" />
+        <textarea class="vnote" data-for="${r.id}" placeholder="备注/打回原因（可选，支持多行）" rows="2"></textarea>
         <button class="btn-ghost btn-sm" data-addphoto="${r.id}" style="margin-top:6px">📷 补拍照片</button>
       </div>
       <div class="verify-btns">

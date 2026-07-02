@@ -91,7 +91,8 @@ body {
 .task-title { font-weight: 600; font-size: 15px; }
 .task-meta { display: flex; align-items: center; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
 .task-meta small { color: var(--muted); font-size: 12px; }
-.note { color: var(--muted); font-size: 12px; }
+.note { color: var(--muted); font-size: 12px; white-space: pre-wrap; word-break: break-word; }
+textarea.checkin-note, textarea.vnote { width: 100%; padding: 9px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; font-family: inherit; resize: vertical; }
 .task-pts { font-weight: 700; color: var(--warn); font-size: 14px; flex-shrink: 0; }
 
 /* 学科标签 */

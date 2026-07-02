@@ -190,7 +190,7 @@ function openCheckinPanel(id, r, records, el) {
         <span class="checkin-title">${r.title}</span>
         <button class="btn-ghost btn-sm" id="ckClose">取消</button>
       </div>
-      <input class="checkin-note" type="text" placeholder="说明（可选）" value="${(r.status === 'rejected' ? '' : (r.note || ''))}" />
+      <textarea class="checkin-note" placeholder="说明（可选，支持多行）" rows="2">${(r.status === 'rejected' ? '' : (r.note || ''))}</textarea>
       <div class="checkin-actions">
         <button class="btn-ghost btn-sm" id="ckPhoto">📷 拍照</button>
         <button class="btn-ghost btn-sm" id="ckGallery">🖼 选相册</button>
