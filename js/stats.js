@@ -147,11 +147,12 @@ export async function renderStats(view) {
       </div>` : ''}
 
     <div class="section-title">明细查询</div>
-    <div class="dayoff-range-row" style="align-items:center">
-      <label style="flex:0 0 auto;color:var(--muted);font-size:13px">日期</label>
-      <input type="date" id="detailDate" value="${today}" style="flex:0 0 auto;padding:9px;border:1px solid var(--line);border-radius:8px;font-size:14px">
-      <select id="detailFilter" style="flex:1;padding:9px;border:1px solid var(--line);border-radius:8px;font-size:14px"><option value="">全部任务</option></select>
-      <button class="btn-primary btn-sm" id="btnDetail">查看</button>
+    <div class="detail-query-bar">
+      <div class="detail-query-row">
+        <input type="date" id="detailDate" value="${today}" class="detail-date-input">
+        <button class="btn-primary btn-sm" id="btnDetail">查看</button>
+      </div>
+      <select id="detailFilter" class="detail-filter-select"><option value="">全部任务</option></select>
     </div>
 
     <div class="section-title">打卡明细</div>
