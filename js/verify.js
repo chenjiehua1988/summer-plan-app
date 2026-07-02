@@ -38,6 +38,7 @@ export async function renderVerify(view) {
     b.onclick = async () => {
       const id = b.dataset.id;
       const act = b.dataset.act;
+      if (act === 'reject' && !confirm('确定打回？孩子需要重新完成。')) return;
       const noteEl = view.querySelector(`.vnote[data-for="${id}"]`);
       const note = noteEl ? noteEl.value.trim() : '';
       try {

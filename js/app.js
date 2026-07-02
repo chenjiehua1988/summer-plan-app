@@ -498,6 +498,7 @@ function renderRedeemReqCard() {
     card.querySelectorAll('[data-approve]').forEach(b => {
       b.onclick = async () => {
         const r = list.find(x => x.id === b.dataset.approve);
+        if (!confirm(`同意兑换「${r.name}」(${r.cost_points}分)？`)) return;
         try { await db.decideRedeemRequest(r, true); toast('已同意，已扣分'); renderRedeemReqCard(); if (window.refreshPointBadge) window.refreshPointBadge(); }
         catch (e) { toast('操作失败：' + e.message); }
       };
@@ -525,6 +526,7 @@ function renderPlanTypesCard() {
     : `<div class="empty">还没有类型。</div>`;
   card.querySelectorAll('[data-del-pt]').forEach(b => {
     b.onclick = async () => {
+      if (!confirm('删除该周期类型？')) return;
       try { await db.deletePlanType(b.dataset.delPt); state.planTypes = state.planTypes.filter(x => x.id !== b.dataset.delPt); renderPlanTypesCard(); fillPlanTypeSelect(); toast('已删除'); }
       catch (e) { toast('删除失败：' + e.message); }
     };
@@ -557,9 +559,14 @@ function renderPlansCard() {
   });
   card.querySelectorAll('[data-del-plan]').forEach(b => {
     b.onclick = async () => {
-      if (!confirm('删除该周期及其所有任务模板和打卡记录？')) return;
-      try { await db.deletePlan(b.dataset.delPlan); state.plans = state.plans.filter(x => x.id !== b.dataset.delPlan); if (state.currentPlanId === b.dataset.delPlan) { state.currentPlanId = null; auth.switchPlan(null); } fillPlanSwitcher(); renderPlansCard(); toast('已删除'); }
-      catch (e) { toast('删除失败：' + e.message); }
+      if (!confirm('删除该周期及其所有任务模板和打卡记录？此操作不可恢复！')) return;
+      const pwd = prompt('请输入家庭密码确认删除：');
+      if (pwd === null) return;
+      try {
+        const { data, error } = await supabase.rpc('pw_match', { p_name: state.family.name, p_pw: pwd });
+        if (error || !data) { toast('密码错误，删除取消'); return; }
+        await db.deletePlan(b.dataset.delPlan); state.plans = state.plans.filter(x => x.id !== b.dataset.delPlan); if (state.currentPlanId === b.dataset.delPlan) { state.currentPlanId = null; auth.switchPlan(null); } fillPlanSwitcher(); renderPlansCard(); toast('已删除');
+      } catch (e) { toast('删除失败：' + e.message); }
     };
   });
 }
@@ -627,6 +634,7 @@ function renderShopCard() {
     });
     card.querySelectorAll('[data-del-shop]').forEach(b => {
       b.onclick = async () => {
+        if (!confirm('删除该奖励项？')) return;
         try { await db.deleteShopItem(b.dataset.delShop); renderShopCard(); toast('已删除'); }
         catch (e) { toast('删除失败：' + e.message); }
       };
