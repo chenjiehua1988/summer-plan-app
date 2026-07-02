@@ -119,6 +119,8 @@ function bindPointsModal() {
   if (!btn) return;
   btn.onclick = async () => {
     if (!state.currentChildId) { toast('请先选择孩子'); return; }
+    // 先显示浮层+全屏加载态（避免从小条撑开）
+    document.getElementById('pointsModalArea').innerHTML = `<div class="loading" style="padding:40px 0">加载中…</div>`;
     modal.style.display = 'flex';
     await renderPoints(document.getElementById('pointsModalArea'), state.currentChildId);
   };
