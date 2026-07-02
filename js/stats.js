@@ -3,6 +3,7 @@
 // ============================================================
 import { state, todayStr, hm, mdhm } from './supabase.js';
 import * as db from './db.js';
+import { viewFullPhoto } from './photo-viewer.js';
 
 export async function renderStats(view) {
   const childId = state.currentChildId;
@@ -145,13 +146,15 @@ export async function renderStats(view) {
           </div>`).join('')}
       </div>` : ''}
 
-    <div class="section-title">打卡明细</div>
+    <div class="section-title">明细查询</div>
     <div class="dayoff-range-row" style="align-items:center">
       <label style="flex:0 0 auto;color:var(--muted);font-size:13px">日期</label>
       <input type="date" id="detailDate" value="${today}" style="flex:0 0 auto;padding:9px;border:1px solid var(--line);border-radius:8px;font-size:14px">
-      <input type="text" id="detailFilter" placeholder="按任务名过滤" style="flex:1;padding:9px;border:1px solid var(--line);border-radius:8px;font-size:14px">
+      <select id="detailFilter" style="flex:1;padding:9px;border:1px solid var(--line);border-radius:8px;font-size:14px"><option value="">全部任务</option></select>
       <button class="btn-primary btn-sm" id="btnDetail">查看</button>
     </div>
+
+    <div class="section-title">打卡明细</div>
     <div id="detailArea"></div>
 
     <div class="section-title">验收操作明细</div>
@@ -159,35 +162,38 @@ export async function renderStats(view) {
   `;
   // 验收操作明细容器（提前声明，避免 TDZ）
   const vArea = view.querySelector('#verifyArea');
+  // 任务下拉框：列出当前周期+孩子的任务
+  const filterSel = view.querySelector('#detailFilter');
+  try {
+    const tmpls = await db.fetchTemplates(state.currentPlanId, state.currentChildId);
+    tmpls.forEach(t => { const o = document.createElement('option'); o.value = t.title; o.textContent = t.title; filterSel.appendChild(o); });
+  } catch (e) {}
   // 查看：同时刷新打卡明细和验收明细（按任务名过滤）
   const refresh = () => {
     const d = view.querySelector('#detailDate').value;
-    const kw = view.querySelector('#detailFilter').value.trim().toLowerCase();
+    const kw = filterSel.value;
     loadDetail(d, kw); loadVerify(d, kw);
   };
   refresh();
   view.querySelector('#btnDetail').onclick = refresh;
-  view.querySelector('#detailFilter').onkeydown = (e) => { if (e.key === 'Enter') refresh(); };
   async function loadDetail(date, kw) {
     const area = view.querySelector('#detailArea');
     area.innerHTML = `<div class="loading">加载中…</div>`;
     let list = [];
     try { list = await db.fetchCheckinsByDate(state.currentChildId, date); } catch (e) {}
-    if (kw) list = list.filter(c => (c.title||'').toLowerCase().includes(kw));
+    if (kw) list = list.filter(c => c.title === kw);
     if (!list.length) { area.innerHTML = `<div class="empty">${date} 没有打卡记录。</div>`; return; }
     area.innerHTML = list.map(c => `
       <div class="checkin-item">
-        <div class="checkin-head"><span class="checkin-time">${hm(c.created_at)} · ${c.created_by||''}</span> <span class="subj subj-${c.title?'':''}" style="background:#aaa">${c.title||''}</span></div>
+        <div class="checkin-head"><span class="checkin-time">${hm(c.created_at)} · ${c.created_by||''}</span> <span class="subj" style="background:#aaa">${c.title||''}</span></div>
         ${c.title ? `<div class="checkin-note" style="font-weight:600">${c.title}</div>` : ''}
         ${c.note ? `<div class="checkin-note">${c.note}</div>` : ''}
-        ${(c.photos||[]).length ? `<div class="checkin-media">${(c.photos||[]).map(u=>`<img src="${u}" data-full="${u}">`).join('')}</div>` : ''}
+        ${(c.photos||[]).length ? `<div class="checkin-media">${(c.photos||[]).map((u,i)=>`<img src="${u}" data-i="${i}" data-photos='${JSON.stringify(c.photos)}'>`).join('')}</div>` : ''}
         ${(c.audios||[]).length ? `<div>${(c.audios||[]).map(u=>`<audio controls src="${u}" style="width:100%;margin:4px 0"></audio>`).join('')}</div>` : ''}
       </div>`).join('');
     area.querySelectorAll('.checkin-media img').forEach(img => img.onclick = () => {
-      const o = document.createElement('div'); o.className='photo-overlay';
-      o.innerHTML = `<div class="photo-bar"><span>照片</span><button class="btn-ghost btn-sm">关闭</button></div><div class="photo-grid"><img src="${img.dataset.full}"></div>`;
-      o.onclick=e=>{if(e.target===o||e.target.tagName==='BUTTON')o.remove()};
-      document.body.appendChild(o);
+      const photos = JSON.parse(img.dataset.photos);
+      viewFullPhoto(photos, +img.dataset.i);
     });
   }
 
@@ -196,7 +202,7 @@ export async function renderStats(view) {
     vArea.innerHTML = `<div class="loading">加载中…</div>`;
     let list = [];
     try { list = await db.fetchVerifyLogsByDate(state.currentChildId, date); } catch (e) {}
-    if (kw) list = list.filter(l => (l.title||'').toLowerCase().includes(kw));
+    if (kw) list = list.filter(l => l.title === kw);
     if (!list.length) { vArea.innerHTML = `<div class="empty">${date} 没有验收操作。</div>`; return; }
     const actionText = { pass: '通过', reject: '打回', revoke: '撤销' };
     const actionColor = { pass: 'badge-ok', reject: 'badge-no', revoke: 'badge-mid' };
@@ -212,6 +218,8 @@ export async function renderStats(view) {
 function calcStreak(okDates) {
   let streak = 0;
   const d = new Date();
+  // 今天没打卡的话，从昨天开始数（不因今天还没打就清零）
+  if (!okDates.has(fmt(d))) d.setDate(d.getDate() - 1);
   for (;;) {
     const ds = fmt(d);
     if (okDates.has(ds)) { streak++; d.setDate(d.getDate() - 1); }
