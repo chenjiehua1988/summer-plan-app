@@ -175,12 +175,14 @@ function taskRow(r) {
           <span class="subj subj-${r.subject}">${r.subject}</span>
           ${tagsHtml}
           ${tag}
+        </div>
+        <div class="task-meta">
           ${photosHtml}
           ${audiosHtml}
-          ${r.note ? `<span class="note">📝 ${r.note}</span>` : ''}
           ${r.completed_at ? `<span class="note">打卡 ${hm(r.completed_at)}</span>` : ''}
           ${r.verified_at ? `<span class="note">验收 ${hm(r.verified_at)}${r.verified_by?' · '+r.verified_by:''}</span>` : ''}
         </div>
+        ${r.note ? `<div class="task-note">📝 ${r.note}</div>` : ''}
       </div>
       ${actBtn}
       <div class="task-pts">${skipped ? '' : '+' + r.points}</div>

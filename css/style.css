@@ -89,8 +89,9 @@ body {
 .check.checked { background: var(--ok); border-color: var(--ok); }
 .task-body { flex: 1; min-width: 0; }
 .task-title { font-weight: 600; font-size: 15px; }
-.task-meta { display: flex; align-items: center; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
+.task-meta { display: flex; align-items: center; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
 .task-meta small { color: var(--muted); font-size: 12px; }
+.task-note { font-size: 12px; color: var(--muted); margin-top: 4px; white-space: pre-wrap; word-break: break-word; }
 .note { color: var(--muted); font-size: 12px; white-space: pre-wrap; word-break: break-word; }
 .task-instruction { font-size: 13px; color: var(--primary); background: #eef3ff; border-radius: 8px; padding: 5px 8px; margin-top: 4px; white-space: pre-wrap; word-break: break-word; }
 .task-instruction .edit-instr { color: var(--primary); cursor: pointer; font-size: 12px; float: right; }
