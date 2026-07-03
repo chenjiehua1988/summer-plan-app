@@ -92,6 +92,8 @@ body {
 .task-meta { display: flex; align-items: center; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
 .task-meta small { color: var(--muted); font-size: 12px; }
 .note { color: var(--muted); font-size: 12px; white-space: pre-wrap; word-break: break-word; }
+.task-instruction { font-size: 13px; color: var(--primary); background: #eef3ff; border-radius: 8px; padding: 5px 8px; margin-top: 4px; white-space: pre-wrap; word-break: break-word; }
+.task-instruction .edit-instr { color: var(--primary); cursor: pointer; font-size: 12px; float: right; }
 textarea.checkin-note, textarea.vnote { width: 100%; padding: 9px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; font-family: inherit; resize: vertical; }
 .task-pts { font-weight: 700; color: var(--warn); font-size: 14px; flex-shrink: 0; }
 

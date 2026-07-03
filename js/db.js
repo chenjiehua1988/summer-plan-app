@@ -117,7 +117,8 @@ export async function addTemplate(t) {
   const row = { family_id: state.family.id, plan_id: t.plan_id, child_id: t.child_id,
     subject: t.subject, title: t.title, default_minutes: t.default_minutes ?? 30,
     points: t.points ?? 1, recurrence: t.recurrence ?? 'daily', active: t.active ?? true,
-    start_date: t.start_date || null, end_date: t.end_date || null, weekdays: t.weekdays || [] };
+    start_date: t.start_date || null, end_date: t.end_date || null, weekdays: t.weekdays || [],
+    instruction: t.instruction || null };
   const { data, error } = await supabase.from('task_templates').insert(row).select().single();
   if (error) throw error;
   // 关联标签
@@ -263,6 +264,7 @@ export async function ensureDailyRecords(childId, date, planId) {
     family_id: state.family.id, plan_id: pid, child_id: childId, task_id: t.id, date,
     subject: t.subject, title: t.title, points: t.points,
     status: isDayOff ? 'skipped' : 'pending',
+    instruction: t.instruction || null,
     tags: (t.tagIds || []).map(tagName).filter(Boolean)
   }));
   const { data: newRecs, error: ie } = await supabase.from('daily_records').insert(rows).select();

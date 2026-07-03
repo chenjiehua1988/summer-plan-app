@@ -77,6 +77,14 @@ export async function renderToday(view) {
         else openCheckinPanel(id, r, records, el);
       });
     });
+    // 父母改当天说明
+    el.querySelector('.edit-instr')?.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const v = prompt('当天要求说明（如：今天背第3课）', r.instruction || '');
+      if (v === null) return;
+      try { await db.updateRecord(id, { instruction: v || null }); r.instruction = v || null; renderToday(document.getElementById('view')); toast('已更新'); }
+      catch (e) { toast('更新失败：' + e.message); }
+    });
     // 查看已有照片/录音
     el.querySelector('.task-photos')?.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -162,6 +170,7 @@ function taskRow(r) {
       <button class="check ${done ? 'checked' : ''} ${skipped ? 'skip' : ''}" aria-label="完成">${done ? '✓' : skipped ? '—' : ''}</button>
       <div class="task-body">
         <div class="task-title">${r.title}</div>
+        ${r.instruction ? `<div class="task-instruction">📋 ${r.instruction}${isParent ? ` <b class="edit-instr" data-instr="${r.id}">改</b>` : ''}</div>` : (isParent ? `<div class="task-instruction"><b class="edit-instr" data-instr="${r.id}">+加说明</b></div>` : '')}
         <div class="task-meta">
           <span class="subj subj-${r.subject}">${r.subject}</span>
           ${tagsHtml}
@@ -503,6 +512,8 @@ function openTemplatePanel(t, tags, container, childId) {
       </div>
       <div class="tp-label">标签</div>
       <div class="seg" id="tpTags"></div>
+      <div class="tp-label">要求说明（默认，每天可单独改）</div>
+      <textarea class="checkin-note" id="tpInstruction" placeholder="如：每天背一课古诗，先读3遍再背" rows="2">${cur.instruction||''}</textarea>
       <div class="tp-label">生效日期（留空=整周期）</div>
       <div class="dayoff-range-row">
         <label>开始 <input type="date" id="tpStart" value="${cur.start_date||''}" min="${plan?.start_date||''}" max="${plan?.end_date||''}"></label>
@@ -559,6 +570,7 @@ function openTemplatePanel(t, tags, container, childId) {
       start_date: $('#tpStart').value || null,
       end_date: $('#tpEnd').value || null,
       weekdays: [...selWd],
+      instruction: $('#tpInstruction').value.trim() || null,
       active: $('#tpActive').checked,
       tagIds: [...selTags]
     };
