@@ -170,7 +170,7 @@ function taskRow(r) {
       <button class="check ${done ? 'checked' : ''} ${skipped ? 'skip' : ''}" aria-label="完成">${done ? '✓' : skipped ? '—' : ''}</button>
       <div class="task-body">
         <div class="task-title">${r.title}</div>
-        ${r.instruction ? `<div class="task-instruction">📋 ${r.instruction}${isParent ? ` <b class="edit-instr" data-instr="${r.id}">改</b>` : ''}</div>` : (isParent ? `<div class="task-instruction"><b class="edit-instr" data-instr="${r.id}">+加说明</b></div>` : '')}
+        ${r.instruction ? `<div class="task-instruction">❗ ${r.instruction}${isParent ? ` <b class="edit-instr" data-instr="${r.id}">改</b>` : ''}</div>` : (isParent ? `<div class="task-instruction"><b class="edit-instr" data-instr="${r.id}">+加说明</b></div>` : '')}
         <div class="task-meta">
           <span class="subj subj-${r.subject}">${r.subject}</span>
           ${tagsHtml}

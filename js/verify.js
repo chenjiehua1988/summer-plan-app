@@ -110,14 +110,17 @@ function verifyRow(r) {
     <li class="task-item" data-id="${r.id}">
       <div class="task-body" style="flex:1">
         <div class="task-title">${r.title}</div>
+        ${r.instruction ? `<div class="task-instruction">❗ ${r.instruction}</div>` : ''}
         <div class="task-meta">
           <span class="subj subj-${r.subject}">${r.subject}</span>
           <span class="note">+${r.points} 分</span>
+        </div>
+        <div class="task-meta">
           ${photos.length ? `<span class="task-photos link" data-viewphoto="${r.id}">📷 ${photos.length}</span>` : ''}
           ${audios.length ? `<span class="task-photos link" data-viewaudio="${r.id}">🎙 ${audios.length}</span>` : ''}
-          ${r.note ? `<span class="note">📝 ${r.note}</span>` : ''}
           ${r.completed_at ? `<span class="note">打卡 ${hm(r.completed_at)}</span>` : ''}
         </div>
+        ${r.note ? `<div class="task-note">📝 ${r.note}</div>` : ''}
         <textarea class="vnote" data-for="${r.id}" placeholder="备注/打回原因（可选，支持多行）" rows="2"></textarea>
         <button class="btn-ghost btn-sm" data-addphoto="${r.id}" style="margin-top:6px">📷 补拍照片</button>
       </div>
@@ -138,15 +141,18 @@ function doneRow(r) {
     <li class="task-item is-done">
       <div class="task-body" style="flex:1">
         <div class="task-title">${r.title}</div>
+        ${r.instruction ? `<div class="task-instruction">❗ ${r.instruction}</div>` : ''}
         <div class="task-meta">
           <span class="subj subj-${r.subject}">${r.subject}</span>
           <span class="badge ${cls}">${txt}</span>
+        </div>
+        <div class="task-meta">
           ${photos.length ? `<span class="task-photos link" data-viewphoto="${r.id}">📷 ${photos.length}</span>` : ''}
           ${audios.length ? `<span class="task-photos link" data-viewaudio="${r.id}">🎙 ${audios.length}</span>` : ''}
-          ${r.note ? `<span class="note">📝 ${r.note}</span>` : ''}
           ${r.completed_at ? `<span class="note">打卡 ${hm(r.completed_at)}</span>` : ''}
           ${r.verified_at ? `<span class="note">验收 ${hm(r.verified_at)}${r.verified_by?' · '+r.verified_by:''}</span>` : ''}
         </div>
+        ${r.note ? `<div class="task-note">📝 ${r.note}</div>` : ''}
       </div>
       ${revokeBtn}
     </li>`;
