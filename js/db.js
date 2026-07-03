@@ -423,7 +423,8 @@ export async function fetchShop() {
 export async function addShopItem(item) {
   const row = { family_id: state.family.id, name: item.name,
     cost_points: item.cost_points, icon: item.icon || '🎁',
-    active: item.active ?? true, sort: item.sort ?? 0 };
+    active: item.active ?? true, sort: item.sort ?? 0,
+    custom_points: item.custom_points ?? false };
   const { data, error } = await supabase.from('reward_shop').insert(row).select().single();
   if (error) throw error;
   return data;
