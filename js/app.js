@@ -603,7 +603,7 @@ function renderTagsCard() {
 function initShopIconPicker() {
   const picker = document.getElementById('sIconPicker');
   if (!picker) return;
-  const icons = ['🎁','📺','🎮','💰','🍦','🧸','📚','🍟','🍕','🎡','🏊','⚽','🏀','🎨','🚲','🎟️','🍫','🥤','🏸','🎬'];
+  const icons = ['🎁','📺','🎮','💰','🍦','🧸','📚','🍟','🍕','🎡','🏊','⚽','🏀','🎨','🚲','🎟️','🍫','🥤','🏸','🏓','🎬','🃏'];
   picker.innerHTML = icons.map(ic => `<button type="button" class="icon-pick ${ic==='🎁'?'on':''}" data-icon="${ic}">${ic}</button>`).join('');
   picker.querySelectorAll('.icon-pick').forEach(b => {
     b.onclick = () => {
