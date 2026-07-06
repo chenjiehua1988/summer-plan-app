@@ -346,9 +346,6 @@ function renderSetup(view) {
     </div>
     <div class="icon-picker" id="sIconPicker"></div>
     <input type="hidden" id="sIcon" value="🎁" />
-    <div class="tp-row" style="margin-bottom:8px">
-      <label class="tp-label"><input type="checkbox" id="sCustom"> 自定义积分（孩子输入数量，如1分=1分钟电视、10分=1元）</label>
-    </div>
     <input type="hidden" id="sIcon" value="🎁" />
     </div>
 
@@ -440,7 +437,7 @@ function renderSetup(view) {
     const cost = +view.querySelector('#sCost').value;
     if (!name || !cost) { toast('请填名称和积分'); return; }
     const custom = view.querySelector('#sCustom').checked;
-    try { await db.addShopItem({ name, cost_points: cost, icon: view.querySelector('#sIcon').value || '🎁', custom_points: custom }); toast('已添加'); renderShopCard(); }
+    try { await db.addShopItem({ name, cost_points: cost, icon: view.querySelector('#sIcon').value || '🎁' }); toast('已添加'); renderShopCard(); }
     catch (e) { toast('添加失败：' + e.message); }
   };
 

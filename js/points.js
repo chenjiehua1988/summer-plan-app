@@ -40,7 +40,7 @@ export async function renderPoints(container, childId) {
         <div class="shop-item">
           <div class="shop-icon">${s.icon || '🎁'}</div>
           <div class="shop-name">${s.name}</div>
-          <div class="shop-cost">${s.cost_points} 分${s.custom_points ? '/个' : ''}</div>
+          <div class="shop-cost">${s.cost_points} 分</div>
           <button class="btn-primary btn-sm shop-btn" data-redeem="${s.id}">${btnLabel}</button>
         </div>`).join('')}
     </div>` : `<div class="empty">商店还没有上架奖励。</div>`}
@@ -119,23 +119,17 @@ export async function renderPoints(container, childId) {
     b.onclick = async () => {
       const s = shop.find(x => x.id === b.dataset.redeem);
       if (!s) return;
-      const custom = s.custom_points;
-      // 自定义积分：输入数量，按单价算总积分（如1分=1分钟，输入25=25分=25分钟）
-      // 固定积分：输入数量，按单价×数量算
-      const unitText = custom ? `${s.cost_points}分=1个` : `单价${s.cost_points}分`;
-      const qtyStr = prompt(`兑换「${s.name}」\n${unitText}，当前余额 ${balance} 分\n请输入数量：`, '1');
+      // 统一逻辑：输入数量（支持小数），扣分=单价×数量
+      const qtyStr = prompt(`兑换「${s.name}」\n单价 ${s.cost_points} 分，当前余额 ${balance} 分\n请输入数量：`, '1');
       if (qtyStr === null) return;
-      const qty = Math.max(1, parseInt(qtyStr) || 1);
-      const total = custom ? s.cost_points * qty : s.cost_points * qty;
+      const qty = parseFloat(qtyStr);
+      if (!qty || qty <= 0) { toast('请输入有效数量'); return; }
+      const total = Math.round(s.cost_points * qty);
+      if (total <= 0) { toast('数量太小'); return; }
       if (isChild) {
         if (!confirm(`申请兑换「${s.name}」×${qty}，共 ${total} 分？\n需爸妈同意后才能扣分兑付。`)) return;
         try {
-          // 自定义积分：写一条申请，cost_points=total；固定积分：按数量写多条
-          if (custom) {
-            await db.addRedeemRequest(childId, { ...s, cost_points: total, name: `${s.name} ×${qty}` });
-          } else {
-            for (let i = 0; i < qty; i++) await db.addRedeemRequest(childId, s);
-          }
+          await db.addRedeemRequest(childId, { ...s, cost_points: total, name: `${s.name} ×${qty}` });
           toast(`已申请，等爸妈同意`);
           renderPoints(container, childId);
         } catch (e) { toast('申请失败：' + e.message); }
@@ -143,11 +137,7 @@ export async function renderPoints(container, childId) {
         if (total > balance) { toast(`积分不足，需要 ${total} 分，当前 ${balance} 分`); return; }
         if (!confirm(`兑换「${s.name}」×${qty}，扣 ${total} 分？`)) return;
         try {
-          if (custom) {
-            await db.redeemReward(childId, { ...s, cost_points: total, name: `${s.name} ×${qty}` });
-          } else {
-            for (let i = 0; i < qty; i++) await db.redeemReward(childId, s);
-          }
+          await db.redeemReward(childId, { ...s, cost_points: total, name: `${s.name} ×${qty}` });
           toast(`兑换成功 🎁`);
           await refreshPointBadge();
           renderPoints(container, childId);
