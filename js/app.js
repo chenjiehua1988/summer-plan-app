@@ -436,7 +436,6 @@ function renderSetup(view) {
     const name = view.querySelector('#sName').value.trim();
     const cost = +view.querySelector('#sCost').value;
     if (!name || !cost) { toast('请填名称和积分'); return; }
-    const custom = view.querySelector('#sCustom').checked;
     try { await db.addShopItem({ name, cost_points: cost, icon: view.querySelector('#sIcon').value || '🎁' }); toast('已添加'); renderShopCard(); }
     catch (e) { toast('添加失败：' + e.message); }
   };
