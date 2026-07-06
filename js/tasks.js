@@ -1,7 +1,7 @@
 // ============================================================
 // 任务模板管理 + 每日打卡视图（按周期 + 标签）
 // ============================================================
-import { state, todayStr, toast, actorName, segHtml, bindSeg, hm, mdhm } from './supabase.js';
+import { supabase, state, todayStr, toast, actorName, segHtml, bindSeg, hm, mdhm } from './supabase.js';
 import * as db from './db.js';
 import { viewFullPhoto } from './photo-viewer.js';
 
@@ -69,11 +69,35 @@ export async function renderToday(view) {
     if (state.mode !== 'parent') {
       el.querySelector('.check')?.addEventListener('click', () => onToggle(id, el, records));
     }
-    // 打卡/改/历史 按钮
+    // 打卡/改/历史/免打卡/恢复 按钮
     el.querySelectorAll('.task-act').forEach(b => {
-      b.addEventListener('click', (e) => {
+      b.addEventListener('click', async (e) => {
         e.stopPropagation();
         if (b.dataset.history) openHistoryPanel(r);
+        else if (b.dataset.skip) {
+          // 免打卡单个任务（需密码）
+          const pwd = prompt('免打卡该任务需输入家庭密码：');
+          if (pwd === null) return;
+          try {
+            const { data, error } = await supabase.rpc('pw_match', { p_name: state.family.name, p_pw: pwd });
+            if (error || !data) { toast('密码错误'); return; }
+            await db.updateRecord(id, { status: 'skipped' });
+            toast('已免打卡');
+            renderToday(document.getElementById('view'));
+          } catch (err) { toast('操作失败：' + err.message); }
+        }
+        else if (b.dataset.unskip) {
+          // 恢复（免打卡→待打卡），需密码
+          const pwd = prompt('恢复打卡需输入家庭密码：');
+          if (pwd === null) return;
+          try {
+            const { data, error } = await supabase.rpc('pw_match', { p_name: state.family.name, p_pw: pwd });
+            if (error || !data) { toast('密码错误'); return; }
+            await db.updateRecord(id, { status: 'pending' });
+            toast('已恢复');
+            renderToday(document.getElementById('view'));
+          } catch (err) { toast('操作失败：' + err.message); }
+        }
         else openCheckinPanel(id, r, records, el);
       });
     });
@@ -161,9 +185,9 @@ function taskRow(r) {
     ? `<span class="task-photos link" data-viewaudio="1">🎙 ${audios.length}</span>` : '';
   const isParent = state.mode === 'parent';
   let actBtn;
-  if (skipped) actBtn = '';
+  if (skipped) actBtn = isParent ? `<button class="task-act btn-ghost btn-sm" data-unskip="${r.id}">恢复</button>` : '';
   else if (verified) actBtn = `<button class="task-act btn-ghost btn-sm" data-history="${r.id}">历史</button>`;
-  else if (isParent) actBtn = done ? `<button class="task-act btn-ghost btn-sm" data-history="${r.id}">历史</button>` : '';
+  else if (isParent) actBtn = `${done ? `<button class="task-act btn-ghost btn-sm" data-history="${r.id}">历史</button>` : ''}<button class="task-act btn-ghost btn-sm" data-skip="${r.id}">免打卡</button>`;
   else actBtn = `<button class="task-act btn-ghost btn-sm">${done ? '改' : '记'}</button>${done ? `<button class="task-act btn-ghost btn-sm" data-history="${r.id}" style="margin-right:0">历史</button>` : ''}`;
   return `
     <li class="task-item ${done ? 'is-done' : ''} ${skipped ? 'is-skip' : ''}" data-id="${r.id}">
