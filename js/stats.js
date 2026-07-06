@@ -205,8 +205,8 @@ export async function renderStats(view) {
     try { list = await db.fetchVerifyLogsByDate(state.currentChildId, date); } catch (e) {}
     if (kw) list = list.filter(l => l.title === kw);
     if (!list.length) { vArea.innerHTML = `<div class="empty">${date} 没有验收操作。</div>`; return; }
-    const actionText = { pass: '通过', reject: '打回', revoke: '撤销' };
-    const actionColor = { pass: 'badge-ok', reject: 'badge-no', revoke: 'badge-mid' };
+    const actionText = { pass: '通过', reject: '打回', revoke: '撤销', instruction: '改说明' };
+    const actionColor = { pass: 'badge-ok', reject: 'badge-no', revoke: 'badge-mid', instruction: 'badge-skip' };
     vArea.innerHTML = list.map(l => `
       <div class="checkin-item">
         <div class="checkin-head"><span class="checkin-time">${hm(l.created_at)} · ${l.operator||''}</span> <span class="badge ${actionColor[l.action]||''}">${actionText[l.action]||l.action}</span></div>

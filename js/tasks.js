@@ -106,8 +106,17 @@ export async function renderToday(view) {
       e.stopPropagation();
       const v = prompt('当天要求说明（如：今天背第3课）', r.instruction || '');
       if (v === null) return;
-      try { await db.updateRecord(id, { instruction: v || null }); r.instruction = v || null; renderToday(document.getElementById('view')); toast('已更新'); }
-      catch (e) { toast('更新失败：' + e.message); }
+      try {
+        await db.updateRecord(id, { instruction: v || null });
+        // 写一条操作流水（说明变更）
+        try {
+          await supabase.from('verify_logs').insert({
+            family_id: state.family.id, record_id: id, child_id: r.child_id, title: r.title,
+            action: 'instruction', note: v || '(清除说明)', operator: actorName()
+          });
+        } catch (le) { console.warn('log failed', le.message); }
+        r.instruction = v || null; renderToday(document.getElementById('view')); toast('已更新');
+      } catch (e) { toast('更新失败：' + e.message); }
     });
     // 查看已有照片/录音
     el.querySelector('.task-photos')?.addEventListener('click', (e) => {
