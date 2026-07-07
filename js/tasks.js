@@ -66,8 +66,13 @@ export async function renderToday(view) {
   // 结算当天（仅父母）
   const btnSettle = view.querySelector('#btnSettle');
   if (btnSettle) btnSettle.onclick = async () => {
-    if (!confirm('结算当天？\n未验收通过的任务每个扣对应积分，全部完成则计连续天数。')) return;
+    const pwd = prompt('结算需输入家庭密码：');
+    if (pwd === null) return;
     try {
+      const { data: ok, error: pe } = await supabase.rpc('pw_match', { p_name: state.family.name, p_pw: pwd });
+      if (pe || !ok) { toast('密码错误'); return; }
+      if (!confirm('结算当天？\n未验收通过的任务每个扣对应积分，全部完成则计连续天数。')) return;
+      const r = await db.settleDay(childId, date);
       const r = await db.settleDay(childId, date);
       if (r.err) { toast(r.err); return; }
       let msg = '';

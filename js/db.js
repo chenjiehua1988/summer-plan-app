@@ -665,10 +665,11 @@ export async function settleDay(childId, date) {
   // 未verified的扣分
   const unfinished = tasks.filter(r => r.status !== 'verified');
   let deducted = 0;
+  const dateShort = date.slice(5); // MM-DD
   for (const r of unfinished) {
     await supabase.from('point_ledger').insert({
       family_id: fam.id, child_id, delta: -r.points,
-      reason: `未完成：${r.title}`, created_by: actorName()
+      reason: `${dateShort}未完成：${r.title}`, created_by: actorName()
     });
     deducted += r.points;
   }
@@ -696,7 +697,7 @@ export async function settleDay(childId, date) {
       // 每 streakDays 天奖励一次（第5天、第10天...）
       await supabase.from('point_ledger').insert({
         family_id: fam.id, child_id, delta: streakBonus,
-        reason: `连续${streakDays}天全部完成奖励`, created_by: '系统'
+        reason: `${dateShort}连续${streakDays}天全部完成奖励`, created_by: '系统'
       });
       bonus = streakBonus;
     }
