@@ -668,7 +668,7 @@ export async function settleDay(childId, date) {
   const dateShort = date.slice(5); // MM-DD
   for (const r of unfinished) {
     await supabase.from('point_ledger').insert({
-      family_id: fam.id, child_id, delta: -r.points,
+      family_id: fam.id, child_id: childId, delta: -r.points,
       reason: `${dateShort}未完成：${r.title}`, created_by: actorName()
     });
     deducted += r.points;
@@ -696,7 +696,7 @@ export async function settleDay(childId, date) {
     if (streak >= streakDays && streak % streakDays === 0) {
       // 每 streakDays 天奖励一次（第5天、第10天...）
       await supabase.from('point_ledger').insert({
-        family_id: fam.id, child_id, delta: streakBonus,
+        family_id: fam.id, child_id: childId, delta: streakBonus,
         reason: `${dateShort}连续${streakDays}天全部完成奖励`, created_by: '系统'
       });
       bonus = streakBonus;
