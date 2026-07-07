@@ -47,7 +47,9 @@ Deno.serve(async (req) => {
       console.error("missing env");
       return new Response("missing env", { status: 500 });
     }
-    const body = await req.json();
+    const rawBody = await req.text();
+    if (!rawBody) { console.log("empty body"); return new Response("empty", { status: 200 }); }
+    const body = JSON.parse(rawBody);
     // 自定义推送（兑换申请/审批等，直接带 subs 和 title/body）
     if (body.type === 'custom' && body.subs) {
       const appServer = await buildAppServer();
