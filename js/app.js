@@ -70,9 +70,29 @@ async function maybeEnterApp() {
     state.pendingTab = state.pendingTab === 'today' ? 'verify' : (state.pendingTab || 'verify');
   }
   switchTab(state.pendingTab || 'today');
+  // 自动结算昨天（只结算一次）
+  autoSettleYesterday();
 }
 
-// 按 mode 显示/隐藏 UI：child 隐藏验收/设置 tab，左上角显示孩子名（替代孩子切换器）
+// 第二天打开时自动结算昨天（只结算一次）
+async function autoSettleYesterday() {
+  try {
+    const fam = state.family;
+    if (!fam?.id || !state.currentChildId) return;
+    const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+    const yStr = yesterday.getFullYear() + '-' + String(yesterday.getMonth()+1).padStart(2,'0') + '-' + String(yesterday.getDate()).padStart(2,'0');
+    // 已结算过昨天则跳过
+    if (fam.last_settle_date && fam.last_settle_date >= yStr) return;
+    const r = await db.settleDay(state.currentChildId, yStr);
+    if (r.err) return;
+    let msg = `昨天结算：`;
+    if (r.deducted > 0) msg += `扣${r.deducted}分（${r.unfinished}个未完成）`;
+    else msg += `全部完成！`;
+    if (r.bonus > 0) msg += ` 连续${r.streak}天，奖励${r.bonus}分🎉`;
+    toast(msg, 5000);
+    if (window.refreshPointBadge) window.refreshPointBadge();
+  } catch (e) { console.warn('autoSettle failed', e.message); }
+}
 function applyModeUI() {
   const isChild = state.mode === 'child';
   document.querySelectorAll('.tab').forEach(t => {

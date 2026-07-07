@@ -22,7 +22,7 @@ export async function loginAsParent(familyName, password, role) {
   if (error) throw error;
   if (!data) throw new Error('家庭名或密码不对');
   const { data: fam, error: fe } = await supabase
-    .from('families').select('id, name').eq('id', data).single();
+    .from('families').select('*').eq('id', data).single();
   if (fe) throw fe;
   state.family = fam;
   state.mode = 'parent';
@@ -37,7 +37,7 @@ export const loginWithPassword = (f, p) => loginAsParent(f, p, '妈妈');
 // 孩子登录：家庭名 + childId
 export async function loginAsChild(familyName, childId) {
   const { data: fam, error } = await supabase
-    .from('families').select('id, name').eq('name', familyName.trim()).maybeSingle();
+    .from('families').select('*').eq('name', familyName.trim()).maybeSingle();
   if (error) throw error;
   if (!fam) throw new Error('家庭名不存在');
   state.family = fam;
@@ -69,7 +69,7 @@ export async function createFamily(familyName, password, role) {
   if (he) throw he;
   const { data: fam, error: ie } = await supabase
     .from('families').insert({ name: familyName, password_hash: hash })
-    .select('id, name').single();
+    .select('*').single();
   if (ie) throw ie;
   state.family = fam;
   state.mode = 'parent';
@@ -84,7 +84,7 @@ export async function restoreSession() {
   const s = loadSessionLocal();
   if (!s || !s.familyId) return null;
   const { data: fam, error } = await supabase
-    .from('families').select('id, name').eq('id', s.familyId).maybeSingle();
+    .from('families').select('*').eq('id', s.familyId).maybeSingle();
   if (error || !fam) { clearSession(); return null; }
   state.family = fam;
   state.mode = s.mode || 'parent';
