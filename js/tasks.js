@@ -73,7 +73,6 @@ export async function renderToday(view) {
       if (pe || !ok) { toast('密码错误'); return; }
       if (!confirm('结算当天？\n未验收通过的任务每个扣对应积分，全部完成则计连续天数。')) return;
       const r = await db.settleDay(childId, date);
-      const r = await db.settleDay(childId, date);
       if (r.err) { toast(r.err); return; }
       let msg = '';
       if (r.deducted > 0) msg += `扣了${r.deducted}分（${r.unfinished}个未完成）`;
