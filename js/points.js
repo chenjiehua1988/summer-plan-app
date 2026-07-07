@@ -83,12 +83,14 @@ export async function renderPoints(container, childId) {
       </ul>`}
   `;
 
-  // 流水过滤任务下拉：从当前周期+孩子的任务列表填
+  // 流水过滤任务下拉：任务列表 + 系统奖励/扣分
   const filterSel = container.querySelector('#ledgerFilter');
   try {
     const tmpls = await db.fetchTemplates(state.currentPlanId, childId);
     tmpls.forEach(t => { const o = document.createElement('option'); o.value = t.title; o.textContent = t.title; filterSel.appendChild(o); });
   } catch (e) {}
+  // 加系统选项
+  const sysOpt = document.createElement('option'); sysOpt.value = '__system__'; sysOpt.textContent = '系统奖惩'; filterSel.appendChild(sysOpt);
 
   // 渲染流水列表
   function renderLedger(list) {
@@ -111,7 +113,8 @@ export async function renderPoints(container, childId) {
     container.querySelector('#ledgerArea').innerHTML = `<div class="loading">加载中…</div>`;
     let list = [];
     try { list = await db.fetchLedgerRange(childId, from, to); } catch (e) {}
-    if (kw) list = list.filter(l => (l.reason||'').includes(kw));
+    if (kw === '__system__') list = list.filter(l => (l.reason||'').includes('连续') || (l.reason||'').includes('未完成'));
+    else if (kw) list = list.filter(l => (l.reason||'').includes(kw));
     renderLedger(list);
   };
 
