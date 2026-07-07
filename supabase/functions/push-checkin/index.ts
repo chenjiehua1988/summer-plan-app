@@ -48,6 +48,20 @@ Deno.serve(async (req) => {
       return new Response("missing env", { status: 500 });
     }
     const body = await req.json();
+    // 自定义推送（兑换申请/审批等，直接带 subs 和 title/body）
+    if (body.type === 'custom' && body.subs) {
+      const appServer = await buildAppServer();
+      const payload = JSON.stringify({ title: body.title, body: body.body });
+      const results = [];
+      for (const s of body.subs) {
+        try {
+          const subscriber = appServer.subscribe({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } });
+          await subscriber.pushTextMessage(payload, {});
+          results.push({ ok: true });
+        } catch (e) { results.push({ error: String(e) }); }
+      }
+      return new Response(JSON.stringify({ ok: true, results }), { headers: { "Content-Type": "application/json" } });
+    }
     const rec = body.record || body;
     const childId = rec.child_id;
     const title = rec.title || "任务";

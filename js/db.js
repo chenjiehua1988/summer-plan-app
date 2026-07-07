@@ -749,6 +749,8 @@ export async function addRedeemRequest(childId, shopItem) {
     status: 'pending' };
   const { data, error } = await supabase.from('redeem_requests').insert(row).select().single();
   if (error) throw error;
+  // 推送通知给家长
+  try { await sendPushToFamily('兑换申请', `${actorName()}申请兑换「${shopItem.name}」(${shopItem.cost_points}分)，请审批`); } catch(e) {}
   return data;
 }
 // 取某孩子的申请（孩子端看）
@@ -792,5 +794,38 @@ export async function decideRedeemRequest(req, approve) {
     decided_by: actorName(), decided_at: new Date().toISOString()
   }).eq('id', req.id).select().single();
   if (error) throw error;
+  // 推送通知给孩子
+  try {
+    const result = approve ? '已同意' : '已拒绝';
+    await sendPushToChild(req.child_id, '兑换审批', `「${req.name}」${result}`);
+  } catch(e) {}
   return data;
+}
+
+// ---------- 推送通知辅助 ----------
+// 推送给家庭所有家长设备
+async function sendPushToFamily(title, body) {
+  const { data: subs } = await supabase.from('push_subscriptions').select('*').eq('family_id', state.family.id);
+  if (!subs || !subs.length) return;
+  const payload = JSON.stringify({ type: 'custom', title, body, subs });
+  try {
+    await fetch('https://dnmgosoqcqmdfpptawbw.supabase.co/functions/v1/push-checkin', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload
+    });
+  } catch (e) { console.warn('push failed', e.message); }
+}
+
+// 推送给某孩子关联的设备（user_role=孩子名）
+async function sendPushToChild(childId, title, body) {
+  const { data: child } = await supabase.from('children').select('name').eq('id', childId).single();
+  if (!child) return;
+  const { data: subs } = await supabase.from('push_subscriptions').select('*')
+    .eq('family_id', state.family.id).eq('user_role', child.name);
+  if (!subs || !subs.length) return;
+  const payload = JSON.stringify({ type: 'custom', title, body, subs });
+  try {
+    await fetch('https://dnmgosoqcqmdfpptawbw.supabase.co/functions/v1/push-checkin', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload
+    });
+  } catch (e) { console.warn('push failed', e.message); }
 }

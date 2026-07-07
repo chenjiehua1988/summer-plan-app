@@ -3,6 +3,7 @@
 // ============================================================
 import { state, toast, mdhm, todayStr } from './supabase.js';
 import * as db from './db.js';
+import { enablePush, disablePush, isPushEnabled } from './push.js';
 
 // 更新顶栏积分显示
 export async function refreshPointBadge() {
@@ -33,6 +34,12 @@ export async function renderPoints(container, childId) {
       <div class="bal-num">⭐ ${balance}</div>
       <div class="bal-label">当前积分</div>
     </div>
+
+    ${isChild ? `
+    <div class="card" style="margin-bottom:10px">
+      <div class="row-line"><span>通知</span><button class="btn-ghost btn-sm" id="btnChildPush">开启</button></div>
+      <div class="row-hint">开启后，爸妈审批你的兑换申请会收到通知。</div>
+    </div>` : ''}
 
     <div class="section-title">兑换商店</div>
     ${onShop.length ? `<div class="shop-grid">
@@ -82,6 +89,17 @@ export async function renderPoints(container, childId) {
           </li>`).join('')}
       </ul>`}
   `;
+
+  // 孩子端通知开关
+  const childPushBtn = container.querySelector('#btnChildPush');
+  if (childPushBtn) {
+    isPushEnabled().then(on => { childPushBtn.textContent = on ? '关闭' : '开启'; });
+    childPushBtn.onclick = async () => {
+      const on = await isPushEnabled();
+      if (on) { await disablePush(); childPushBtn.textContent = '开启'; }
+      else { const ok = await enablePush(); if (ok) childPushBtn.textContent = '关闭'; }
+    };
+  }
 
   // 流水过滤任务下拉：任务列表 + 系统奖励/扣分
   const filterSel = container.querySelector('#ledgerFilter');
