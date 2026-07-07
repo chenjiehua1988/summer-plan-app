@@ -810,7 +810,9 @@ async function sendPushToFamily(title, body) {
   const payload = JSON.stringify({ type: 'custom', title, body, subs });
   try {
     await fetch('https://dnmgosoqcqmdfpptawbw.supabase.co/functions/v1/push-checkin', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer sb_publishable_1_AlE8lgLeCk1pVeajJ9Qg_6b_cu0jB' },
+      body: payload
     });
   } catch (e) { console.warn('push failed', e.message); }
 }
@@ -825,7 +827,9 @@ async function sendPushToChild(childId, title, body) {
   const payload = JSON.stringify({ type: 'custom', title, body, subs });
   try {
     await fetch('https://dnmgosoqcqmdfpptawbw.supabase.co/functions/v1/push-checkin', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer sb_publishable_1_AlE8lgLeCk1pVeajJ9Qg_6b_cu0jB' },
+      body: payload
     });
   } catch (e) { console.warn('push failed', e.message); }
 }
