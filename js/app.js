@@ -74,23 +74,31 @@ async function maybeEnterApp() {
   autoSettleYesterday();
 }
 
-// 第二天打开时自动结算昨天（只结算一次）
+// 第二天打开时自动结算昨天（所有孩子，只结算一次）
 async function autoSettleYesterday() {
   try {
     const fam = state.family;
-    if (!fam?.id || !state.currentChildId) return;
+    if (!fam?.id || !state.children.length) return;
     const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
     const yStr = yesterday.getFullYear() + '-' + String(yesterday.getMonth()+1).padStart(2,'0') + '-' + String(yesterday.getDate()).padStart(2,'0');
     // 已结算过昨天则跳过
     if (fam.last_settle_date && fam.last_settle_date >= yStr) return;
-    const r = await db.settleDay(state.currentChildId, yStr);
-    if (r.err) return;
-    let msg = `昨天结算：`;
-    if (r.deducted > 0) msg += `扣${r.deducted}分（${r.unfinished}个未完成）`;
-    else msg += `全部完成！`;
-    if (r.bonus > 0) msg += ` 连续${r.streak}天，奖励${r.bonus}分🎉`;
-    toast(msg, 5000);
-    if (window.refreshPointBadge) window.refreshPointBadge();
+    // 结算所有孩子
+    let msg = '昨天结算：';
+    let hasResult = false;
+    for (const child of state.children) {
+      try {
+        const r = await db.settleDay(child.id, yStr);
+        if (r.err) continue;
+        hasResult = true;
+        msg += `${child.name}：`;
+        if (r.deducted > 0) msg += `扣${r.deducted}分（${r.unfinished}个未完成）`;
+        else msg += `全部完成`;
+        if (r.bonus > 0) msg += ` 连续${r.streak}天奖励${r.bonus}分🎉`;
+        msg += '；';
+      } catch (e) { console.warn('settle failed for', child.name, e.message); }
+    }
+    if (hasResult) { toast(msg, 6000); if (window.refreshPointBadge) window.refreshPointBadge(); }
   } catch (e) { console.warn('autoSettle failed', e.message); }
 }
 function applyModeUI() {
