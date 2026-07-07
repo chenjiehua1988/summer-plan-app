@@ -686,9 +686,10 @@ function tmplRow(t, tags) {
     sched.push(`${t.start_date?(t.start_date.slice(5))+'起':''}${t.end_date?('至'+(t.end_date.slice(5))):''}`);
   }
   const schedHtml = sched.length ? `<span class="note" style="color:var(--primary)">📅 ${sched.join(' · ')}</span>` : '';
+  const onceTag = t.recurrence === 'once' ? `<span class="badge" style="background:#fff4e0;color:#b06a00">一次性</span>` : '';
   return `
     <div class="tmpl-card">
-      <div class="tmpl-card-title">${t.title} ${activeTag}</div>
+      <div class="tmpl-card-title">${t.title} ${onceTag} ${activeTag}</div>
       <div class="tmpl-card-tags">${tagHtml}<span class="subj subj-${t.subject}">${t.subject}</span></div>
       ${schedHtml ? `<div class="tmpl-card-sched">${schedHtml}</div>` : ''}
       <div class="tmpl-card-foot">
