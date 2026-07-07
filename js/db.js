@@ -703,8 +703,8 @@ export async function settleDay(childId, date) {
     }
   }
 
-  // 记录结算日期（防重复）
-  await supabase.from('families').update({ last_settle_date: date }).eq('id', fam.id);
+  // 记录该孩子的结算日期（防重复，按孩子独立）
+  await supabase.from('children').update({ last_settle_date: date }).eq('id', childId);
 
   return { deducted, streak, bonus, unfinished: unfinished.length };
 }

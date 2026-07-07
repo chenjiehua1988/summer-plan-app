@@ -74,19 +74,21 @@ async function maybeEnterApp() {
   autoSettleYesterday();
 }
 
-// 第二天打开时自动结算昨天（所有孩子，只结算一次）
+// 第二天打开时自动结算昨天（所有孩子，每个孩子独立检查是否已结算）
 async function autoSettleYesterday() {
   try {
     const fam = state.family;
     if (!fam?.id || !state.children.length) return;
     const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
     const yStr = yesterday.getFullYear() + '-' + String(yesterday.getMonth()+1).padStart(2,'0') + '-' + String(yesterday.getDate()).padStart(2,'0');
-    // 已结算过昨天则跳过
-    if (fam.last_settle_date && fam.last_settle_date >= yStr) return;
-    // 结算所有孩子
+    // 重新查 children 获取 last_settle_date（state.children 可能没这个字段）
+    const { data: kids } = await supabase.from('children').select('id,name,last_settle_date').eq('family_id', fam.id);
+    if (!kids || !kids.length) return;
     let msg = '昨天结算：';
     let hasResult = false;
-    for (const child of state.children) {
+    for (const child of kids) {
+      // 该孩子已结算过昨天则跳过
+      if (child.last_settle_date && child.last_settle_date >= yStr) continue;
       try {
         const r = await db.settleDay(child.id, yStr);
         if (r.err) continue;

@@ -7,6 +7,9 @@ alter table public.families add column if not exists streak_days int default 5;
 alter table public.families add column if not exists streak_bonus int default 50;
 alter table public.families add column if not exists last_settle_date date;
 
+-- 按孩子记录结算日期（防止只结算一个孩子就跳过另一个）
+alter table public.children add column if not exists last_settle_date date;
+
 -- ============================================================
--- 完成。结算时间/连续天数/奖励积分可配，last_settle_date 防重复结算。
+-- 完成。每个孩子独立记录结算日期，防止漏结算。
 -- ============================================================
