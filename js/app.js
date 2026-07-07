@@ -303,6 +303,15 @@ function renderSetup(view) {
       <div class="row-hint">家长角色登录时已固定，不可切换。退出后可换另一个家长身份登录。</div>
     </div>
 
+    <div class="section-title">奖惩规则</div>
+    <div class="card">
+      <div class="row-line"><span>结算时间</span><input type="time" id="settleTime" value="${state.family?.settle_time || '21:00'}" style="padding:6px;border:1px solid var(--line);border-radius:8px"></div>
+      <div class="row-line"><span>连续天数</span><input type="number" id="streakDays" value="${state.family?.streak_days || 5}" style="width:60px;padding:6px;border:1px solid var(--line);border-radius:8px"></div>
+      <div class="row-line"><span>奖励积分</span><input type="number" id="streakBonus" value="${state.family?.streak_bonus || 50}" style="width:70px;padding:6px;border:1px solid var(--line);border-radius:8px"></div>
+      <div class="row-hint">未完成任务扣对应积分；连续N天全验收通过奖N积分。父母在今日页点「结算当天」执行。</div>
+      <button class="btn-primary btn-sm" id="btnSaveRule" style="margin-top:8px">保存规则</button>
+    </div>
+
     <div class="section-title">通知设置</div>
     <div class="card">
       <div class="row-line"><span>打卡通知</span><button class="btn-ghost btn-sm" id="btnPushToggle">开启</button></div>
@@ -370,6 +379,22 @@ function renderSetup(view) {
 
   renderRedeemReqCard();
   initPushToggle();
+  // 保存奖惩规则
+  const btnRule = view.querySelector('#btnSaveRule');
+  if (btnRule) btnRule.onclick = async () => {
+    try {
+      const { error } = await supabase.from('families').update({
+        settle_time: view.querySelector('#settleTime').value || '21:00',
+        streak_days: +view.querySelector('#streakDays').value || 5,
+        streak_bonus: +view.querySelector('#streakBonus').value || 50
+      }).eq('id', state.family.id);
+      if (error) throw error;
+      state.family.settle_time = view.querySelector('#settleTime').value;
+      state.family.streak_days = +view.querySelector('#streakDays').value;
+      state.family.streak_bonus = +view.querySelector('#streakBonus').value;
+      toast('规则已保存');
+    } catch (e) { toast('保存失败：' + e.message); }
+  };
   renderPlansCard();
   renderPlanTypesCard();
   fillPlanTypeSelect();

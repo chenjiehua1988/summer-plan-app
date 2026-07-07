@@ -50,7 +50,8 @@ export async function renderToday(view) {
            ${state.mode === 'parent' ? `<button class="btn-ghost btn-sm" id="unmarkDayOff">取消假期</button>` : ''}`
         : (state.mode === 'parent'
             ? `<button class="btn-ghost btn-sm" id="markDayOff">今天设为假期</button>
-               <button class="btn-ghost btn-sm" id="presetDayOff">预设假期时段</button>`
+               <button class="btn-ghost btn-sm" id="presetDayOff">预设假期时段</button>
+               <button class="btn-primary btn-sm" id="btnSettle">结算当天</button>`
             : `<span style="color:var(--muted)">今天正常学习</span>`)}
     </div>
     ${records.length === 0 ? `<div class="empty">今天还没有任务。去「设置」给当前周期/孩子添加任务清单。</div>` : ''}
@@ -62,6 +63,22 @@ export async function renderToday(view) {
 
   view.querySelector('#refreshToday').onclick = () => renderToday(view);
   bindDayOff(view, childId, date, dayOff);
+  // 结算当天（仅父母）
+  const btnSettle = view.querySelector('#btnSettle');
+  if (btnSettle) btnSettle.onclick = async () => {
+    if (!confirm('结算当天？\n未验收通过的任务每个扣对应积分，全部完成则计连续天数。')) return;
+    try {
+      const r = await db.settleDay(childId, date);
+      if (r.err) { toast(r.err); return; }
+      let msg = '';
+      if (r.deducted > 0) msg += `扣了${r.deducted}分（${r.unfinished}个未完成）`;
+      else msg += '全部完成！';
+      if (r.bonus > 0) msg += `，连续${r.streak}天，奖励${r.bonus}分 🎉`;
+      else if (!r.deducted) msg += `（连续${r.streak}天）`;
+      toast(msg, 4000);
+      if (window.refreshPointBadge) window.refreshPointBadge();
+    } catch (e) { toast('结算失败：' + e.message); }
+  };
   view.querySelectorAll('.task-item').forEach(el => {
     const id = el.dataset.id;
     const r = records.find(x => x.id === id);

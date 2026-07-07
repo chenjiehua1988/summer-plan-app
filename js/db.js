@@ -652,6 +652,62 @@ export async function fetchCheckinsByDate(childId, date) {
   return data || [];
 }
 
+// ---------- 奖惩结算 ----------
+// 结算当天：未verified任务扣分，全完成计连续天数+奖励
+export async function settleDay(childId, date) {
+  const fam = state.family;
+  // 查当天所有非skipped记录
+  const { data: recs } = await supabase.from('daily_records').select('*')
+    .eq('child_id', childId).eq('date', date).neq('status', 'skipped');
+  const tasks = recs || [];
+  if (!tasks.length) return { err: '当天没有任务' };
+
+  // 未verified的扣分
+  const unfinished = tasks.filter(r => r.status !== 'verified');
+  let deducted = 0;
+  for (const r of unfinished) {
+    await supabase.from('point_ledger').insert({
+      family_id: fam.id, child_id, delta: -r.points,
+      reason: `未完成：${r.title}`, created_by: actorName()
+    });
+    deducted += r.points;
+  }
+
+  // 全完成则计连续天数
+  let streak = 0;
+  let bonus = 0;
+  if (!unfinished.length) {
+    // 往前数连续全verified的天数（含今天）
+    streak = 1;
+    const d = new Date(date + 'T00:00:00');
+    for (;;) {
+      d.setDate(d.getDate() - 1);
+      const ds = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+      const { data: prev } = await supabase.from('daily_records').select('status')
+        .eq('child_id', childId).eq('date', ds).neq('status', 'skipped');
+      if (!prev || !prev.length) break; // 没任务不算
+      if (prev.every(r => r.status === 'verified')) streak++;
+      else break;
+    }
+    // 达标奖励
+    const streakDays = fam.streak_days || 5;
+    const streakBonus = fam.streak_bonus || 50;
+    if (streak >= streakDays && streak % streakDays === 0) {
+      // 每 streakDays 天奖励一次（第5天、第10天...）
+      await supabase.from('point_ledger').insert({
+        family_id: fam.id, child_id, delta: streakBonus,
+        reason: `连续${streakDays}天全部完成奖励`, created_by: '系统'
+      });
+      bonus = streakBonus;
+    }
+  }
+
+  // 记录结算日期（防重复）
+  await supabase.from('families').update({ last_settle_date: date }).eq('id', fam.id);
+
+  return { deducted, streak, bonus, unfinished: unfinished.length };
+}
+
 // ---------- 验收操作流水 ----------
 // 取某孩子某天所有验收操作（按时间倒序）
 export async function fetchVerifyLogsByDate(childId, date) {
