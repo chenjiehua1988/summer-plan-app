@@ -237,7 +237,16 @@ export async function ensureDailyRecords(childId, date, planId) {
   if (!pid) return existing || [];
   const templates = await fetchTemplates(pid, childId);
   const dow = new Date(date + 'T00:00:00').getDay();
-  const active = templates.filter(t => t.active && inSchedule(t, date, dow));
+  let active = templates.filter(t => t.active && inSchedule(t, date, dow));
+  // 一次性任务(once)：检查周期内是否已验收通过，已通过的不生成
+  const onceTemplates = active.filter(t => t.recurrence === 'once');
+  if (onceTemplates.length) {
+    const onceIds = onceTemplates.map(t => t.id);
+    const { data: doneOnce } = await supabase.from('daily_records').select('task_id')
+      .eq('child_id', childId).eq('plan_id', pid).in('task_id', onceIds).eq('status', 'verified');
+    const doneIds = new Set((doneOnce || []).map(r => r.task_id));
+    active = active.filter(t => !(t.recurrence === 'once' && doneIds.has(t.id)));
+  }
   // 已有记录的 task_id 集合
   const existingTaskIds = new Set((existing || []).map(r => r.task_id));
   // 找出有模板但没记录的任务（新增的）
@@ -265,6 +274,7 @@ export async function ensureDailyRecords(childId, date, planId) {
     subject: t.subject, title: t.title, points: t.points,
     status: isDayOff ? 'skipped' : 'pending',
     instruction: t.instruction || null,
+    recurrence: t.recurrence || 'daily',
     tags: (t.tagIds || []).map(tagName).filter(Boolean)
   }));
   const { data: newRecs, error: ie } = await supabase.from('daily_records').insert(rows).select();
@@ -656,10 +666,19 @@ export async function fetchCheckinsByDate(childId, date) {
 // 结算当天：未verified任务扣分，全完成计连续天数+奖励
 export async function settleDay(childId, date) {
   const fam = state.family;
-  // 查当天所有非skipped记录
+  // 查当天所有非skipped记录（排除一次性任务，不参与结算扣分）
   const { data: recs } = await supabase.from('daily_records').select('*')
-    .eq('child_id', childId).eq('date', date).neq('status', 'skipped');
-  const tasks = recs || [];
+    .eq('child_id', childId).eq('date', date).neq('status', 'skipped')
+    .neq('task_id', 'null');
+  // 过滤掉一次性任务（通过 task_templates 查 recurrence）
+  let tasks = recs || [];
+  if (tasks.length) {
+    const taskIds = [...new Set(tasks.map(r => r.task_id).filter(Boolean))];
+    const { data: tmpls } = await supabase.from('task_templates').select('id,recurrence').in('id', taskIds);
+    const onceIds = new Set((tmpls || []).filter(t => t.recurrence === 'once').map(t => t.id));
+    tasks = tasks.filter(r => !onceIds.has(r.task_id));
+  }
+  if (!tasks.length) return { err: '当天没有任务' };
   if (!tasks.length) return { err: '当天没有任务' };
 
   // 未verified的扣分

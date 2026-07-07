@@ -28,9 +28,11 @@ export async function renderToday(view) {
 
   const doneCount = records.filter(r => r.status === 'done' || r.status === 'verified').length;
   const effectiveTotal = records.filter(r => r.status !== 'skipped').length;
-  // 按标签分组（skipped 也显示但灰色；无标签归"其他"）
+  // 分组：一次性任务单独一组，每日任务按标签分组
   const groups = {};
+  const onceGroup = [];
   records.forEach(r => {
+    if (r.recurrence === 'once') { onceGroup.push(r); return; }
     const tags = (r.tags && r.tags.length) ? r.tags : ['其他'];
     tags.forEach(tg => { (groups[tg] = groups[tg] || []).push(r); });
   });
@@ -59,6 +61,10 @@ export async function renderToday(view) {
       <div class="task-group-head">${g}</div>
       <ul class="task-list">${groups[g].map(r => taskRow(r)).join('')}</ul>
     `).join('')}
+    ${onceGroup.length ? `
+      <div class="task-group-head" style="color:var(--warn)">📌 一次性任务</div>
+      <ul class="task-list">${onceGroup.map(r => taskRow(r)).join('')}</ul>
+    ` : ''}
   `;
 
   view.querySelector('#refreshToday').onclick = () => renderToday(view);
@@ -197,6 +203,7 @@ function taskRow(r) {
   const done = r.status === 'done' || r.status === 'verified';
   const verified = r.status === 'verified';
   const rejected = r.status === 'rejected';
+  const onceBadge = r.recurrence === 'once' ? `<span class="badge" style="background:#fff4e0;color:#b06a00">一次性</span>` : '';
   const tag = skipped ? `<span class="badge badge-skip">免打卡</span>`
             : verified ? `<span class="badge badge-ok">已验收</span>`
             : rejected ? `<span class="badge badge-no">被打回</span>`
@@ -228,6 +235,7 @@ function taskRow(r) {
         <div class="task-meta">
           <span class="subj subj-${r.subject}">${r.subject}</span>
           ${tagsHtml}
+          ${onceBadge}
           ${tag}
         </div>
         <div class="task-meta">
@@ -549,7 +557,7 @@ export async function renderTemplates(container, childId) {
 // 任务编辑/添加面板（底部抽屉）
 function openTemplatePanel(t, tags, container, childId) {
   const isEdit = !!t;
-  const cur = t || { title:'', subject:'语文', default_minutes:30, points:1, active:true, tagIds:[], weekdays:[], start_date:'', end_date:'' };
+  const cur = t || { title:'', subject:'语文', default_minutes:30, points:1, active:true, tagIds:[], weekdays:[], start_date:'', end_date:'', recurrence:'daily' };
   const plan = state.plans.find(p => p.id === state.currentPlanId);
   const overlay = document.createElement('div');
   overlay.className = 'checkin-overlay';
@@ -562,6 +570,8 @@ function openTemplatePanel(t, tags, container, childId) {
       <input class="checkin-note" id="tpTitle" type="text" placeholder="任务名（如：口算100题）" value="${cur.title}" />
       <div class="tp-label">科目</div>
       <div class="seg-block" id="tpSubject"></div>
+      <div class="tp-label">任务类型</div>
+      <div class="seg-block" id="tpRecurrence"></div>
       <div class="tp-row">
         <label class="tp-label">用时(分) <input id="tpMin" type="number" value="${cur.default_minutes}" style="width:70px"></label>
         <label class="tp-label">积分 <input id="tpPts" type="number" value="${cur.points}" style="width:60px"></label>
@@ -597,6 +607,15 @@ function openTemplatePanel(t, tags, container, childId) {
     subjEl.querySelectorAll('.seg-btn').forEach(x=>x.classList.remove('on'));
     b.classList.add('on'); subj = b.dataset.seg;
   });
+  // 任务类型单选
+  const recEl = $('#tpRecurrence');
+  const recLabels = { daily: '每天', once: '一次性' };
+  recEl.innerHTML = segHtml([{value:'daily',label:'每天'},{value:'once',label:'一次性'}], cur.recurrence || 'daily', true);
+  let recurrence = cur.recurrence || 'daily';
+  recEl.querySelectorAll('.seg-btn').forEach(b => b.onclick = () => {
+    recEl.querySelectorAll('.seg-btn').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on'); recurrence = b.dataset.seg;
+  });
   // 标签多选
   const tagEl = $('#tpTags');
   const selTags = new Set(cur.tagIds || []);
@@ -626,6 +645,7 @@ function openTemplatePanel(t, tags, container, childId) {
       start_date: $('#tpStart').value || null,
       end_date: $('#tpEnd').value || null,
       weekdays: [...selWd],
+      recurrence,
       instruction: $('#tpInstruction').value.trim() || null,
       active: $('#tpActive').checked,
       tagIds: [...selTags]
