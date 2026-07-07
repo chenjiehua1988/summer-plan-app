@@ -42,6 +42,15 @@ async function buildAppServer() {
 
 Deno.serve(async (req) => {
   console.log("push-checkin invoked");
+  // CORS 预检
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type'
+    }});
+  }
+  const corsHeaders = { 'Access-Control-Allow-Origin': '*' };
   try {
     if (!VAPID_PRIVATE_KEY || !VAPID_PUBLIC_KEY || !SUPABASE_URL || !SERVICE_ROLE_KEY) {
       console.error("missing env");
@@ -62,7 +71,7 @@ Deno.serve(async (req) => {
           results.push({ ok: true });
         } catch (e) { results.push({ error: String(e) }); }
       }
-      return new Response(JSON.stringify({ ok: true, results }), { headers: { "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ ok: true, results }), { headers: { "Content-Type": "application/json", ...corsHeaders } });
     }
     const rec = body.record || body;
     const childId = rec.child_id;
@@ -103,9 +112,9 @@ Deno.serve(async (req) => {
         results.push({ error: msg });
       }
     }
-    return new Response(JSON.stringify({ ok: true, results }), { headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ ok: true, results }), { headers: { "Content-Type": "application/json", ...corsHeaders } });
   } catch (e) {
     console.error("top error", String(e));
-    return new Response(JSON.stringify({ error: String(e) }), { status: 500 });
+    return new Response(JSON.stringify({ error: String(e) }), { status: 500, headers: corsHeaders });
   }
 });
