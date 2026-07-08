@@ -356,25 +356,27 @@ function openCheckinPanel(id, r, records, el) {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         st.recMime = MediaRecorder.isTypeSupported('audio/webm') ? 'webm'
           : MediaRecorder.isTypeSupported('audio/mp4') ? 'mp4' : '';
-        const mr = new MediaRecorder(stream, st.recMime ? { mimeType: 'audio/' + st.recMime } : undefined);
-        const chunks = [];
-        mr.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
-        mr.onstop = () => {
-          const blob = new Blob(chunks, { type: 'audio/' + st.recMime });
-          st.audioBlobs.push({ blob, ext: st.recMime, sec: st.recSec });
-          renderPicked();
-          stream.getTracks().forEach(t => t.stop());
-        };
-        st.recorder = mr;
+        st._stream = stream;
         recHint.textContent = '';
       } catch (e) { recHint.textContent = '无法访问麦克风，请用「选音频文件」'; return; }
     }
   };
   recToggle.onclick = () => {
-    if (!st.recorder) return;
+    if (!st._stream) return;
     if (!st.recording) {
-      st.recorder.start();
-      st.recording = true; st.recSec = 0;
+      // 每次录音都新建 MediaRecorder + 独立的 chunks
+      const chunks = [];
+      const mr = new MediaRecorder(st._stream, st.recMime ? { mimeType: 'audio/' + st.recMime } : undefined);
+      mr.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+      mr.onstop = () => {
+        const blob = new Blob(chunks, { type: 'audio/' + st.recMime });
+        st.audioBlobs.push({ blob, ext: st.recMime, sec: st.recSec });
+        renderPicked();
+      };
+      st.recorder = mr;
+      st.recSec = 0;
+      mr.start();
+      st.recording = true;
       recToggle.textContent = '停止';
       st.recTimer = setInterval(() => { st.recSec++; recTime.textContent = fmtSec(st.recSec); }, 1000);
     } else {

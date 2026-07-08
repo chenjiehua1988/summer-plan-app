@@ -85,9 +85,11 @@ Deno.serve(async (req) => {
     const name = child.name || "孩子";
     console.log("child:", name, "family:", familyId);
 
-    const { data: subs } = await sb.from("push_subscriptions").select("*").eq("family_id", familyId);
-    console.log("subs count:", subs?.length || 0);
-    if (!subs || !subs.length) return new Response("no subs", { status: 200 });
+    const { data: allSubs } = await sb.from("push_subscriptions").select("*").eq("family_id", familyId);
+    // 打卡通知只推给家长（user_role=妈妈/爸爸），不推给孩子
+    const subs = (allSubs || []).filter(s => s.user_role === "妈妈" || s.user_role === "爸爸");
+    console.log("parent subs count:", subs.length);
+    if (!subs.length) return new Response("no parent subs", { status: 200 });
 
     const appServer = await buildAppServer();
     const payload = JSON.stringify({ title: "宝贝打卡了", body: `${name}完成了「${title}」，请验收` });

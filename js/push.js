@@ -43,7 +43,7 @@ export async function enablePush() {
     const subJson = sub.toJSON();
     const { error } = await supabase.from('push_subscriptions').upsert({
       family_id: state.family.id,
-      user_role: state.role,
+      user_role: state.mode === 'child' ? (state.children.find(c => c.id === state.currentChildId)?.name || 'child') : state.role,
       endpoint: subJson.endpoint,
       p256dh: subJson.keys.p256dh,
       auth: subJson.keys.auth
