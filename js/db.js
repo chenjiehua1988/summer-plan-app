@@ -615,9 +615,12 @@ export async function uploadAudio(recordId, blob, ext) {
   const fam = state.family.id;
   const ts = Date.now();
   const path = `audio/${fam}/${recordId}/${ts}_${Math.random().toString(36).slice(2, 6)}.${ext}`;
-  const { error } = await supabase.storage.from('verify-photos').upload(path, blob, {
+  // 带超时保护（60秒）
+  const uploadPromise = supabase.storage.from('verify-photos').upload(path, blob, {
     contentType: blob.type || `audio/${ext}`, upsert: false
   });
+  const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('上传超时')), 60000));
+  const { error } = await Promise.race([uploadPromise, timeoutPromise]);
   if (error) throw error;
   const { data: pub } = supabase.storage.from('verify-photos').getPublicUrl(path);
   return pub.publicUrl;
@@ -674,8 +677,7 @@ export async function settleDay(childId, date) {
   const fam = state.family;
   // 查当天所有非skipped记录（排除一次性任务，不参与结算扣分）
   const { data: recs } = await supabase.from('daily_records').select('*')
-    .eq('child_id', childId).eq('date', date).neq('status', 'skipped')
-    .neq('task_id', 'null');
+    .eq('child_id', childId).eq('date', date).neq('status', 'skipped');
   // 过滤掉一次性任务（通过 task_templates 查 recurrence）
   let tasks = recs || [];
   if (tasks.length) {

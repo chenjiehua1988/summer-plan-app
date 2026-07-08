@@ -397,7 +397,7 @@ function openCheckinPanel(id, r, records, el) {
     const btn = $('#ckSubmit');
     btn.disabled = true; btn.textContent = '提交中…';
     try {
-      // 上传新照片/录音
+      // 上传新照片/录音（带超时保护）
       let newPhotos = [], newAudios = [];
       if (st.photoFiles.length) {
         toast(`上传 ${st.photoFiles.length} 张照片…`);
@@ -405,7 +405,11 @@ function openCheckinPanel(id, r, records, el) {
       }
       if (st.audioBlobs.length) {
         toast(`上传 ${st.audioBlobs.length} 段录音…`);
-        for (const a of st.audioBlobs) newAudios.push(await db.uploadAudio(id, a.blob, a.ext));
+        for (let i = 0; i < st.audioBlobs.length; i++) {
+          const a = st.audioBlobs[i];
+          btn.textContent = `上传录音 ${i+1}/${st.audioBlobs.length}…`;
+          newAudios.push(await db.uploadAudio(id, a.blob, a.ext));
+        }
       }
       // 合并：已有的（没删的）+ 新传的
       const allPhotos = [...st.existingPhotos, ...newPhotos];
