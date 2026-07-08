@@ -338,6 +338,12 @@ export async function verifyRecord(id, status, note) {
       note: note || null, operator: actorName()
     });
   } catch (e) { console.warn('verify_log failed', e.message); }
+  // 推送通知孩子（通过/打回都通知）
+  try {
+    const action = status === 'verified' ? '已通过' : '已打回';
+    const msg = note ? `${action}：${note}` : action;
+    await sendPushToChild(data.child_id, '验收通知', `「${data.title}」${msg}`);
+  } catch (e) { console.warn('push failed', e.message); }
   return data;
 }
 
