@@ -370,10 +370,16 @@ function openCheckinPanel(id, r, records, el) {
         const mr = new MediaRecorder(stream, st.recMime ? { mimeType: 'audio/' + st.recMime } : undefined);
         mr.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
         mr.onstop = () => {
-          const blob = new Blob(chunks, { type: 'audio/' + st.recMime });
-          console.log('录音完成', st.audioBlobs.length, 'size=', blob.size, 'chunks=', chunks.length);
-          st.audioBlobs.push({ blob, ext: st.recMime, sec: st.recSec });
-          renderPicked();
+          // 立即复制 chunks 内容（避免 iOS Safari 闭包引用问题）
+          const chunkCopy = chunks.slice();
+          const blob = new Blob(chunkCopy, { type: 'audio/' + st.recMime });
+          // 用 ArrayBuffer 深拷贝，确保每段录音独立
+          blob.arrayBuffer().then(buf => {
+            const independentBlob = new Blob([buf], { type: 'audio/' + st.recMime });
+            console.log('录音完成', st.audioBlobs.length, 'size=', independentBlob.size);
+            st.audioBlobs.push({ blob: independentBlob, ext: st.recMime, sec: st.recSec });
+            renderPicked();
+          });
           stream.getTracks().forEach(t => t.stop());
         };
         st.recorder = mr;
