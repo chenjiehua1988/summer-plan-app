@@ -371,9 +371,10 @@ function openCheckinPanel(id, r, records, el) {
         mr.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
         mr.onstop = () => {
           const blob = new Blob(chunks, { type: 'audio/' + st.recMime });
+          console.log('录音完成', st.audioBlobs.length, 'size=', blob.size, 'chunks=', chunks.length);
           st.audioBlobs.push({ blob, ext: st.recMime, sec: st.recSec });
           renderPicked();
-          stream.getTracks().forEach(t => t.stop()); // 录完释放 stream
+          stream.getTracks().forEach(t => t.stop());
         };
         st.recorder = mr;
         st.recSec = 0;
@@ -410,6 +411,7 @@ function openCheckinPanel(id, r, records, el) {
         toast(`上传 ${st.audioBlobs.length} 段录音…`);
         for (let i = 0; i < st.audioBlobs.length; i++) {
           const a = st.audioBlobs[i];
+          console.log('上传录音', i, 'size=', a.blob.size, 'type=', a.blob.type);
           btn.textContent = `上传录音 ${i+1}/${st.audioBlobs.length}…`;
           newAudios.push(await db.uploadAudio(id, a.blob, a.ext));
         }
