@@ -189,7 +189,7 @@ export async function renderStats(view) {
     if (!list.length) { area.innerHTML = `<div class="empty">${fromDate}~${toDate} 没有打卡记录。</div>`; return; }
     area.innerHTML = list.map(c => `
       <div class="checkin-item">
-        <div class="checkin-head"><span class="checkin-time">${hm(c.created_at)} · ${c.created_by||''}</span></div>
+        <div class="checkin-head"><span class="checkin-time">${mdhm(c.created_at)} · ${c.created_by||''}</span></div>
         ${c.title ? `<div class="checkin-note" style="font-weight:600">${c.title}</div>` : ''}
         ${c.note ? `<div class="checkin-note">${c.note}</div>` : ''}
         ${(c.photos||[]).length ? `<div class="checkin-media">${(c.photos||[]).map((u,i)=>`<img src="${u}" data-i="${i}" data-photos='${JSON.stringify(c.photos)}'>`).join('')}</div>` : ''}
@@ -212,7 +212,7 @@ export async function renderStats(view) {
     const actionColor = { pass: 'badge-ok', reject: 'badge-no', revoke: 'badge-mid', instruction: 'badge-skip' };
     vArea.innerHTML = list.map(l => `
       <div class="checkin-item">
-        <div class="checkin-head"><span class="checkin-time">${hm(l.created_at)} · ${l.operator||''}</span> <span class="badge ${actionColor[l.action]||''}">${actionText[l.action]||l.action}</span></div>
+        <div class="checkin-head"><span class="checkin-time">${mdhm(l.created_at)} · ${l.operator||''}</span> <span class="badge ${actionColor[l.action]||''}">${actionText[l.action]||l.action}</span></div>
         ${l.title ? `<div class="checkin-note" style="font-weight:600">${l.title}</div>` : ''}
         ${l.note ? `<div class="checkin-note">${l.note}</div>` : ''}
       </div>`).join('');
