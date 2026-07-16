@@ -413,6 +413,15 @@ export async function fetchRewards(childId) {
   if (error) throw error;
   return data || [];
 }
+export async function fetchRewardsRange(childId, fromDate, toDate) {
+  let q = supabase.from('rewards').select('*').eq('child_id', childId)
+    .order('redeemed_at', { ascending: false });
+  if (fromDate) q = q.gte('redeemed_at', fromDate + 'T00:00:00');
+  if (toDate) q = q.lte('redeemed_at', toDate + 'T23:59:59');
+  const { data, error } = await q;
+  if (error) throw error;
+  return data || [];
+}
 export async function redeemReward(childId, shopItem) {
   // shopItem: { id, name, cost_points }
   // 扣减积分：写一条负数流水 + 一条奖励记录
@@ -670,6 +679,15 @@ export async function fetchCheckinsByDate(childId, date) {
   if (error) throw error;
   return data || [];
 }
+export async function fetchCheckinsByDateRange(childId, fromDate, toDate) {
+  let q = supabase.from('checkins').select('*').eq('child_id', childId)
+    .order('created_at', { ascending: false });
+  if (fromDate) q = q.gte('created_at', fromDate + 'T00:00:00');
+  if (toDate) q = q.lte('created_at', toDate + 'T23:59:59');
+  const { data, error } = await q;
+  if (error) throw error;
+  return data || [];
+}
 
 // ---------- 奖惩结算 ----------
 // 结算当天：未verified任务扣分，全完成计连续天数+奖励
@@ -744,6 +762,15 @@ export async function fetchVerifyLogsByDate(childId, date) {
     .gte('created_at', date + 'T00:00:00')
     .lte('created_at', date + 'T23:59:59')
     .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+export async function fetchVerifyLogsByRange(childId, fromDate, toDate) {
+  let q = supabase.from('verify_logs').select('*').eq('child_id', childId)
+    .order('created_at', { ascending: false });
+  if (fromDate) q = q.gte('created_at', fromDate + 'T00:00:00');
+  if (toDate) q = q.lte('created_at', toDate + 'T23:59:59');
+  const { data, error } = await q;
   if (error) throw error;
   return data || [];
 }

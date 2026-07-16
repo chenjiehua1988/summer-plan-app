@@ -149,7 +149,9 @@ export async function renderStats(view) {
     <div class="section-title">明细查询</div>
     <div class="detail-query-bar">
       <div class="detail-query-row">
-        <input type="date" id="detailDate" value="${today}" class="detail-date-input">
+        <input type="date" id="detailFrom" value="${today}" class="detail-date-input">
+        <span style="color:var(--muted);font-size:12px">至</span>
+        <input type="date" id="detailTo" value="${today}" class="detail-date-input">
         <button class="btn-primary btn-sm" id="btnDetail">查看</button>
       </div>
       <select id="detailFilter" class="detail-filter-select"><option value="">全部任务</option></select>
@@ -169,21 +171,22 @@ export async function renderStats(view) {
     const tmpls = await db.fetchTemplates(state.currentPlanId, state.currentChildId);
     tmpls.forEach(t => { const o = document.createElement('option'); o.value = t.title; o.textContent = t.title; filterSel.appendChild(o); });
   } catch (e) {}
-  // 查看：同时刷新打卡明细和验收明细（按任务名过滤）
+  // 查看：同时刷新打卡明细和验收明细（按日期范围+任务名过滤）
   const refresh = () => {
-    const d = view.querySelector('#detailDate').value;
+    const from = view.querySelector('#detailFrom').value;
+    const to = view.querySelector('#detailTo').value;
     const kw = filterSel.value;
-    loadDetail(d, kw); loadVerify(d, kw);
+    loadDetail(from, to, kw); loadVerify(from, to, kw);
   };
   refresh();
   view.querySelector('#btnDetail').onclick = refresh;
-  async function loadDetail(date, kw) {
+  async function loadDetail(fromDate, toDate, kw) {
     const area = view.querySelector('#detailArea');
     area.innerHTML = `<div class="loading">加载中…</div>`;
     let list = [];
-    try { list = await db.fetchCheckinsByDate(state.currentChildId, date); } catch (e) {}
+    try { list = await db.fetchCheckinsByDateRange(state.currentChildId, fromDate, toDate); } catch (e) {}
     if (kw) list = list.filter(c => c.title === kw);
-    if (!list.length) { area.innerHTML = `<div class="empty">${date} 没有打卡记录。</div>`; return; }
+    if (!list.length) { area.innerHTML = `<div class="empty">${fromDate}~${toDate} 没有打卡记录。</div>`; return; }
     area.innerHTML = list.map(c => `
       <div class="checkin-item">
         <div class="checkin-head"><span class="checkin-time">${hm(c.created_at)} · ${c.created_by||''}</span></div>
@@ -199,12 +202,12 @@ export async function renderStats(view) {
   }
 
   // 验收操作明细（用同一日期+任务名过滤）
-  async function loadVerify(date, kw) {
+  async function loadVerify(fromDate, toDate, kw) {
     vArea.innerHTML = `<div class="loading">加载中…</div>`;
     let list = [];
-    try { list = await db.fetchVerifyLogsByDate(state.currentChildId, date); } catch (e) {}
+    try { list = await db.fetchVerifyLogsByRange(state.currentChildId, fromDate, toDate); } catch (e) {}
     if (kw) list = list.filter(l => l.title === kw);
-    if (!list.length) { vArea.innerHTML = `<div class="empty">${date} 没有验收操作。</div>`; return; }
+    if (!list.length) { vArea.innerHTML = `<div class="empty">${fromDate}~${toDate} 没有验收操作。</div>`; return; }
     const actionText = { pass: '通过', reject: '打回', revoke: '撤销', instruction: '改说明' };
     const actionColor = { pass: 'badge-ok', reject: 'badge-no', revoke: 'badge-mid', instruction: 'badge-skip' };
     vArea.innerHTML = list.map(l => `

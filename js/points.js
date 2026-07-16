@@ -23,7 +23,7 @@ export async function renderPoints(container, childId) {
   const today = todayStr();
   // 余额查全部（量小），流水默认查当天
   const [rewards, balance, shop, reqs, todayLedger] = await Promise.all([
-    db.fetchRewards(childId), db.fetchPointBalance(childId), db.fetchShop(),
+    db.fetchRewardsRange(childId, today, today), db.fetchPointBalance(childId), db.fetchShop(),
     db.fetchRedeemRequestsByChild(childId), db.fetchLedgerRange(childId, today, today)
   ]);
   const onShop = shop.filter(s => s.active);
@@ -85,15 +85,7 @@ export async function renderPoints(container, childId) {
     <div id="ledgerArea"></div>
 
     <div class="section-title">已兑换奖励</div>
-    ${rewards.length === 0 ? `<div class="empty">还没有兑换记录。</div>` : `
-      <ul class="ledger-list">
-        ${rewards.slice(0, 30).map(rw => `
-          <li class="ledger-row">
-            <div><div class="ledger-reason">${rw.name}</div>
-            <small>${mdhm(rw.redeemed_at)}</small></div>
-            <div class="ledger-delta minus">-${rw.cost_points}</div>
-          </li>`).join('')}
-      </ul>`}
+    <div id="rewardsArea"></div>
   `;
 
   // 孩子端通知开关
@@ -155,17 +147,37 @@ export async function renderPoints(container, childId) {
   }
   // 初始显示当天
   renderLedger(todayLedger);
-  // 查询按钮
+  // 渲染已兑换奖励
+  function renderRewards(list) {
+    const area = container.querySelector('#rewardsArea');
+    if (!area) return;
+    if (!list.length) { area.innerHTML = `<div class="empty">没有兑换记录。</div>`; return; }
+    area.innerHTML = `<ul class="ledger-list">${list.map(rw => `
+      <li class="ledger-row">
+        <div><div class="ledger-reason">${rw.name}</div>
+        <small>${mdhm(rw.redeemed_at)}</small></div>
+        <div class="ledger-delta minus">-${rw.cost_points}</div>
+      </li>`).join('')}</ul>`;
+  }
+  renderRewards(rewards);
+  // 查询按钮——同时刷新流水和已兑换
   container.querySelector('#btnLedger').onclick = async () => {
     const from = container.querySelector('#ledgerFrom').value;
     const to = container.querySelector('#ledgerTo').value;
     const kw = filterSel.value;
     container.querySelector('#ledgerArea').innerHTML = `<div class="loading">加载中…</div>`;
-    let list = [];
-    try { list = await db.fetchLedgerRange(childId, from, to); } catch (e) {}
-    if (kw === '__system__') list = list.filter(l => (l.reason||'').includes('连续') || (l.reason||'').includes('未完成'));
+    container.querySelector('#rewardsArea').innerHTML = `<div class="loading">加载中…</div>`;
+    let [list, rwList] = [[], []];
+    try {
+      [list, rwList] = await Promise.all([
+        db.fetchLedgerRange(childId, from, to),
+        db.fetchRewardsRange(childId, from, to)
+      ]);
+    } catch (e) {}
+    if (kw === '__system__') list = list.filter(l => (l.reason||'').includes('连续') || (l.reason||'').includes('未完成') || (l.reason||'').includes('惩罚扣分'));
     else if (kw) list = list.filter(l => (l.reason||'').includes(kw));
     renderLedger(list);
+    renderRewards(rwList);
   };
 
   container.querySelectorAll('[data-redeem]').forEach(b => {
