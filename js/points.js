@@ -1,7 +1,7 @@
 // ============================================================
 // 积分与奖励：余额、兑换商店、流水、兑换记录
 // ============================================================
-import { state, toast, mdhm, todayStr } from './supabase.js';
+import { supabase, state, toast, mdhm, todayStr } from './supabase.js';
 import * as db from './db.js';
 import { enablePush, disablePush, isPushEnabled } from './push.js';
 
@@ -34,6 +34,12 @@ export async function renderPoints(container, childId) {
       <div class="bal-num">⭐ ${balance}</div>
       <div class="bal-label">当前积分</div>
     </div>
+
+    ${!isChild ? `
+    <div class="card" style="margin-bottom:10px">
+      <div class="row-line"><span>手动扣分</span><button class="btn-ghost btn-sm" id="btnDeduct" style="color:var(--no)">惩罚扣分</button></div>
+      <div class="row-hint">错题太多、抄答案等惩罚性扣分，需输入家庭密码。</div>
+    </div>` : ''}
 
     ${isChild ? `
     <div class="card" style="margin-bottom:10px">
@@ -98,6 +104,32 @@ export async function renderPoints(container, childId) {
       const on = await isPushEnabled();
       if (on) { await disablePush(); childPushBtn.textContent = '开启'; }
       else { const ok = await enablePush(); if (ok) childPushBtn.textContent = '关闭'; }
+    };
+  }
+
+  // 家长手动扣分
+  const deductBtn = container.querySelector('#btnDeduct');
+  if (deductBtn) {
+    deductBtn.onclick = async () => {
+      const pwd = prompt('请输入家庭密码：');
+      if (pwd === null) return;
+      try {
+        const { data: ok, error: pe } = await supabase.rpc('pw_match', { p_name: state.family.name, p_pw: pwd });
+        if (pe || !ok) { toast('密码错误'); return; }
+        const pointsStr = prompt(`扣多少积分？（当前余额 ${balance} 分）`);
+        if (pointsStr === null) return;
+        const pts = parseInt(pointsStr);
+        if (!pts || pts <= 0) { toast('请输入有效积分数'); return; }
+        const reason = prompt('扣分原因（如：错题太多/抄答案）') || '惩罚扣分';
+        if (!confirm(`确认扣 ${pts} 分？\n原因：${reason}`)) return;
+        await supabase.from('point_ledger').insert({
+          family_id: state.family.id, child_id: childId, delta: -pts,
+          reason: `惩罚扣分：${reason}`, created_by: state.role
+        });
+        toast(`已扣 ${pts} 分`);
+        await refreshPointBadge();
+        renderPoints(container, childId);
+      } catch (e) { toast('扣分失败：' + e.message); }
     };
   }
 
