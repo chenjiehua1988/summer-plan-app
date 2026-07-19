@@ -37,8 +37,8 @@ export async function renderPoints(container, childId) {
 
     ${!isChild ? `
     <div class="card" style="margin-bottom:10px">
-      <div class="row-line"><span>手动扣分</span><button class="btn-ghost btn-sm" id="btnDeduct" style="color:var(--no)">惩罚扣分</button></div>
-      <div class="row-hint">错题太多、抄答案等惩罚性扣分，需输入家庭密码。</div>
+      <div class="row-line"><span>手动调整积分</span><button class="btn-ghost btn-sm" id="btnDeduct" style="color:var(--muted)">调整积分</button></div>
+      <div class="row-hint">正数=扣分（惩罚），负数=加分（奖励），需输入家庭密码。</div>
     </div>` : ''}
 
     ${isChild ? `
@@ -108,17 +108,18 @@ export async function renderPoints(container, childId) {
       try {
         const { data: ok, error: pe } = await supabase.rpc('pw_match', { p_name: state.family.name, p_pw: pwd });
         if (pe || !ok) { toast('密码错误'); return; }
-        const pointsStr = prompt(`扣多少积分？（当前余额 ${balance} 分）`);
+        const pointsStr = prompt(`调整积分（正数=扣分，负数=加分）\n当前余额 ${balance} 分`);
         if (pointsStr === null) return;
         const pts = parseInt(pointsStr);
-        if (!pts || pts <= 0) { toast('请输入有效积分数'); return; }
-        const reason = prompt('扣分原因（如：错题太多/抄答案）') || '惩罚扣分';
-        if (!confirm(`确认扣 ${pts} 分？\n原因：${reason}`)) return;
+        if (!pts || pts === 0) { toast('请输入有效整数（非零）'); return; }
+        const isDeduct = pts > 0;
+        const reason = prompt(isDeduct ? '扣分原因（如：错题太多/抄答案）' : '加分原因（如：额外完成/表现好）') || (isDeduct ? '惩罚扣分' : '手动奖励');
+        if (!confirm(`确认${isDeduct ? '扣' : '加'} ${Math.abs(pts)} 分？\n原因：${reason}`)) return;
         await supabase.from('point_ledger').insert({
           family_id: state.family.id, child_id: childId, delta: -pts,
-          reason: `惩罚扣分：${reason}`, created_by: state.role
+          reason: `${isDeduct ? '惩罚扣分' : '手动奖励'}：${reason}`, created_by: state.role
         });
-        toast(`已扣 ${pts} 分`);
+        toast(`已${isDeduct ? '扣' : '加'} ${Math.abs(pts)} 分`);
         await refreshPointBadge();
         renderPoints(container, childId);
       } catch (e) { toast('扣分失败：' + e.message); }

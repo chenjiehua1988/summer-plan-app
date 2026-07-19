@@ -78,14 +78,22 @@ export async function renderToday(view) {
       const { data: ok, error: pe } = await supabase.rpc('pw_match', { p_name: state.family.name, p_pw: pwd });
       if (pe || !ok) { toast('密码错误'); return; }
       if (!confirm('结算当天？\n未验收通过的任务每个扣对应积分，全部完成则计连续天数。')) return;
-      const r = await db.settleDay(childId, date);
-      if (r.err) { toast(r.err); return; }
-      let msg = '';
-      if (r.deducted > 0) msg += `扣了${r.deducted}分（${r.unfinished}个未完成）`;
-      else msg += '全部完成！';
-      if (r.bonus > 0) msg += `，连续${r.streak}天，奖励${r.bonus}分 🎉`;
-      else if (!r.deducted) msg += `（连续${r.streak}天）`;
-      toast(msg, 4000);
+      // 结算家庭所有孩子
+      const allChildren = state.children?.length ? state.children : [{ id: childId, name: '' }];
+      const msgs = [];
+      for (const child of allChildren) {
+        const r = await db.settleDay(child.id, date);
+        if (r.err) continue; // 没任务就跳过
+        const label = child.name ? `${child.name}：` : '';
+        let msg = label;
+        if (r.deducted > 0) msg += `扣了${r.deducted}分（${r.unfinished}个未完成）`;
+        else msg += '全部完成！';
+        if (r.bonus > 0) msg += `，连续${r.streak}天，奖励${r.bonus}分 🎉`;
+        else if (!r.deducted) msg += `（连续${r.streak}天）`;
+        msgs.push(msg);
+      }
+      if (!msgs.length) { toast('所有孩子今天都没有任务'); return; }
+      toast(msgs.join('\n'), 5000);
       if (window.refreshPointBadge) window.refreshPointBadge();
     } catch (e) { toast('结算失败：' + e.message); }
   };
