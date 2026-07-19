@@ -37,7 +37,7 @@ export async function renderPoints(container, childId) {
 
     ${!isChild ? `
     <div class="card" style="margin-bottom:10px">
-      <div class="row-line"><span>手动调整积分</span><button class="btn-ghost btn-sm" id="btnDeduct" style="color:var(--muted)">调整积分</button></div>
+      <div class="row-line"><span>手动调整积分</span><button class="btn-primary btn-sm" id="btnDeduct">调整积分</button></div>
       <div class="row-hint">正数=扣分（惩罚），负数=加分（奖励），需输入家庭密码。</div>
     </div>` : ''}
 
