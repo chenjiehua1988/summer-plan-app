@@ -698,44 +698,52 @@ export async function fetchCheckinsByDateRange(childId, fromDate, toDate) {
 //   - 有常规任务未完成 → 中断
 //   - 只在当前学习周期内数；跨周期 break（靠 plan_id 过滤实现）
 // 返回连续天数（不含当天）
-export async function calcConsecutiveDays(childId, date, planId) {
-  const r = await calcConsecutiveDaysDetail(childId, date, planId);
+export async function calcConsecutiveDays(childId, date, planId, startDate) {
+  const r = await calcConsecutiveDaysDetail(childId, date, planId, startDate);
   return r.streak;
 }
 
 // 返回连续天数 + 每天的明细（供点击查看中断原因）
-// detail: [{ date, type: 'ok'|'break'|'dayoff'|'none'|'onceOnly', unfinished:[{title,status}] }]
-export async function calcConsecutiveDaysDetail(childId, date, planId) {
+// detail: [{ date, type: 'ok'|'break'|'dayoff'|'none', unfinished:[{title,status}] }]
+// startDate: 学习周期开始日期，往前数到早于这天就停止
+// 性能：一次性拉取整个周期的 daily_records/day_off/task_templates，在内存里逐天判断，
+// 不再对每天单独发请求（之前每天一次串行请求，手机网络延迟高时会卡好几秒）
+export async function calcConsecutiveDaysDetail(childId, date, planId, startDate) {
   const pid = planId || state.currentPlanId;
   if (!pid) return { streak: 0, detail: [] };
 
-  // 预取 once 模板集合
-  const { data: onceTmpls } = await supabase.from('task_templates').select('id,recurrence').eq('plan_id', pid);
-  const onceIds = new Set((onceTmpls || []).filter(t => t.recurrence === 'once').map(t => t.id));
+  const fromBound = startDate || '2000-01-01';
 
-  // 预取该孩子本周期所有假期日期
-  const dayOffDates = new Set();
-  const { data: offs } = await supabase.from('day_off').select('date')
-    .eq('plan_id', pid).eq('child_id', childId);
-  (offs || []).forEach(o => dayOffDates.add(o.date));
+  const [tmplsRes, offsRes, recsRes] = await Promise.all([
+    supabase.from('task_templates').select('id,recurrence').eq('plan_id', pid),
+    supabase.from('day_off').select('date').eq('plan_id', pid).eq('child_id', childId),
+    supabase.from('daily_records').select('date,status,task_id,title')
+      .eq('child_id', childId).eq('plan_id', pid).neq('status', 'skipped')
+      .gte('date', fromBound).lt('date', date)
+  ]);
+
+  const onceIds = new Set((tmplsRes.data || []).filter(t => t.recurrence === 'once').map(t => t.id));
+  const dayOffDates = new Set((offsRes.data || []).map(o => o.date));
+  const recordsByDate = {};
+  (recsRes.data || []).forEach(r => { (recordsByDate[r.date] = recordsByDate[r.date] || []).push(r); });
 
   let streak = 0;
   const detail = [];
   const d = new Date(date + 'T00:00:00');
+  const cap = startDate ? 366 : 400; // 防御性上限
   let guard = 0;
-  while (guard++ < 400) {
+  while (guard++ < cap) {
     d.setDate(d.getDate() - 1);
     const ds = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 
+    if (startDate && ds < startDate) break; // 早于周期开始日，停止
+
     if (dayOffDates.has(ds)) { detail.push({ date: ds, type: 'dayoff' }); continue; }
 
-    const { data: prev } = await supabase.from('daily_records').select('status,task_id,title')
-      .eq('child_id', childId).eq('date', ds).eq('plan_id', pid).neq('status', 'skipped');
-
+    const prev = recordsByDate[ds];
     if (!prev || !prev.length) { detail.push({ date: ds, type: 'none' }); continue; }
 
     // 一次性任务(once)本身不参与打卡统计:做没做都不影响当天"是否全部完成"
-    // 只看常规任务是否都 verified
     const regular = prev.filter(r => !onceIds.has(r.task_id));
     const regUnfinished = regular.filter(r => r.status !== 'verified');
     if (regUnfinished.length) {
@@ -791,7 +799,8 @@ export async function settleDay(childId, date) {
   let bonus = 0;
 
   if (todayAllDone) {
-    streak = await calcConsecutiveDays(childId, date, state.currentPlanId);
+    const { data: planRow } = await supabase.from('plans').select('start_date').eq('id', state.currentPlanId).maybeSingle();
+    streak = await calcConsecutiveDays(childId, date, state.currentPlanId, planRow?.start_date);
 
     // 取该孩子最近一次的已奖励周期数（防重复发奖）
     let lastBonus = 0;

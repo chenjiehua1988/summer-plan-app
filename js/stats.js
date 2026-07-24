@@ -28,7 +28,7 @@ export async function renderStats(view) {
   const today = todayStr();
   // 连续打卡天数：统一口径（不算当天、假期跳过、once例外、当前周期内）
   let streak = 0;
-  try { streak = await db.calcConsecutiveDays(childId, today, state.currentPlanId); } catch (e) {}
+  try { streak = await db.calcConsecutiveDays(childId, today, state.currentPlanId, plan?.start_date); } catch (e) {}
 
   // 假期天数
   let dayOffCount = 0;
@@ -169,10 +169,12 @@ export async function renderStats(view) {
   if (streakCard) {
     let streakDetail = null;
     streakCard.onclick = async () => {
+      const loadingOverlay = showStreakLoading();
       if (streakDetail === null) {
-        try { const r = await db.calcConsecutiveDaysDetail(childId, today, state.currentPlanId); streakDetail = r.detail; }
+        try { const r = await db.calcConsecutiveDaysDetail(childId, today, state.currentPlanId, plan?.start_date); streakDetail = r.detail; }
         catch (e) { streakDetail = []; }
       }
+      loadingOverlay.remove();
       showStreakPanel(streak, streakDetail);
     };
   }
@@ -237,6 +239,16 @@ function fmt(d) {
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
+}
+
+// 点击后立即显示加载提示（手机网络下查询耗时更明显，避免看起来像卡死）
+function showStreakLoading() {
+  const overlay = document.createElement('div');
+  overlay.className = 'photo-overlay';
+  overlay.style.background = 'rgba(0,0,0,.5)';
+  overlay.innerHTML = `<div class="streak-panel" style="padding:30px;text-align:center;color:var(--muted,#999)">加载中…</div>`;
+  document.body.appendChild(overlay);
+  return overlay;
 }
 
 // 连续打卡明细面板：点卡片查看哪天中断、中断原因
