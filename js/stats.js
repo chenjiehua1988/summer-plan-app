@@ -5,7 +5,10 @@ import { state, todayStr, mdhm } from './supabase.js';
 import * as db from './db.js';
 import { viewFullPhoto } from './photo-viewer.js';
 
+let _renderToken = 0; // 防止渲染期间被新的一次调用抢先，导致操作已被替换的旧DOM
+
 export async function renderStats(view) {
+  const myToken = ++_renderToken;
   const childId = state.currentChildId;
   if (!childId) { view.innerHTML = `<div class="empty">请先添加孩子。</div>`; return; }
   if (!state.currentPlanId) { view.innerHTML = `<div class="empty">请先选择一个学习周期。</div>`; return; }
@@ -16,6 +19,7 @@ export async function renderStats(view) {
   let records = [];
   try { records = await db.fetchRecordsByPlan(state.currentPlanId, childId); }
   catch (e) { records = []; }
+  if (myToken !== _renderToken) return; // 已被更新的一次渲染取代，放弃
 
   // 排除 skipped（假期免打卡）后统计
   const eff = records.filter(r => r.status !== 'skipped');
@@ -29,10 +33,12 @@ export async function renderStats(view) {
   // 连续打卡天数：统一口径（不算当天、假期跳过、once例外、当前周期内）
   let streak = 0;
   try { streak = await db.calcConsecutiveDays(childId, today, state.currentPlanId, plan?.start_date); } catch (e) {}
+  if (myToken !== _renderToken) return; // 已被更新的一次渲染取代，放弃
 
   // 假期天数
   let dayOffCount = 0;
   try { dayOffCount = (await db.fetchDayOffs(state.currentPlanId, childId)).length; } catch (e) {}
+  if (myToken !== _renderToken) return; // 已被更新的一次渲染取代，放弃
 
   // 倒计时/天数
   let totalDays = 0, passedDays = 0, leftDays = null, progressPct = 0;
@@ -72,6 +78,7 @@ export async function renderStats(view) {
       return { name: p.name, rate: t ? Math.round(v / t * 100) : 0, v, t, status: p.status };
     }));
   } catch (e) {}
+  if (myToken !== _renderToken) return; // 已被更新的一次渲染取代，放弃
 
   // 近 7 天柱状
   const last7 = [];
