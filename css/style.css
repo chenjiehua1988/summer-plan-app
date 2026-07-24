@@ -367,7 +367,7 @@ textarea.checkin-note, textarea.vnote { width: 100%; padding: 9px; border: 1px s
   border-bottom: 1px solid var(--border,#f0f0f0); font-size: 14px; }
 .streak-date { font-weight: 600; min-width: 52px; }
 .streak-status { flex: 1; }
-.streak-break { width: 100%; font-size: 13px; color: var(--no,#e74c3c); line-height: 1.5;
+.streak-break { width: 100%; font-size: 14px; color: var(--no,#e74c3c); line-height: 1.5;
   padding: 4px 8px; margin-top: 2px; background: rgba(231,76,60,.08); border-radius: 6px; }
 .streak-ok .streak-status { color: var(--ok,#27ae60); }
 .streak-break .streak-status { color: var(--no,#e74c3c); }
