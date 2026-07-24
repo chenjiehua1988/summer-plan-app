@@ -689,6 +689,53 @@ export async function fetchCheckinsByDateRange(childId, fromDate, toDate) {
   return data || [];
 }
 
+// ---------- 连续打卡天数（统一口径，统计页与结算共用）----------
+// 规则：
+//   - 不算当天，从昨天起往前数
+//   - 前一天是假期（day_off 表）→ 跳过，不计入、不中断
+//   - 前一天未完成的任务全是一次性任务(once) → 例外跳过，不中断
+//   - 前一天没生成记录（周期外/未生成）→ 跳过继续数
+//   - 有常规任务未完成 → 中断
+//   - 只在当前学习周期内数；跨周期 break（靠 plan_id 过滤实现）
+// 返回连续天数（不含当天）
+export async function calcConsecutiveDays(childId, date, planId) {
+  const pid = planId || state.currentPlanId;
+  if (!pid) return 0;
+
+  // 预取 once 模板集合
+  const { data: onceTmpls } = await supabase.from('task_templates').select('id,recurrence').eq('plan_id', pid);
+  const onceIds = new Set((onceTmpls || []).filter(t => t.recurrence === 'once').map(t => t.id));
+
+  // 预取该孩子本周期所有假期日期
+  const dayOffDates = new Set();
+  const { data: offs } = await supabase.from('day_off').select('date')
+    .eq('plan_id', pid).eq('child_id', childId);
+  (offs || []).forEach(o => dayOffDates.add(o.date));
+
+  let streak = 0;
+  const d = new Date(date + 'T00:00:00');
+  let guard = 0;
+  while (guard++ < 400) {
+    d.setDate(d.getDate() - 1);
+    const ds = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+
+    if (dayOffDates.has(ds)) continue; // 假期跳过
+
+    const { data: prev } = await supabase.from('daily_records').select('status,task_id')
+      .eq('child_id', childId).eq('date', ds).eq('plan_id', pid).neq('status', 'skipped');
+
+    if (!prev || !prev.length) continue; // 没记录跳过
+
+    const prevUnfinished = prev.filter(r => r.status !== 'verified');
+    if (prevUnfinished.length) {
+      if (prevUnfinished.every(r => onceIds.has(r.task_id))) continue; // 全 once 未完成 → 跳过
+      break; // 常规未完成 → 中断
+    }
+    streak++;
+  }
+  return streak;
+}
+
 // ---------- 奖惩结算 ----------
 // 结算当天：未verified任务扣分，全完成计连续天数+奖励
 export async function settleDay(childId, date) {
@@ -719,12 +766,10 @@ export async function settleDay(childId, date) {
     deducted += r.points;
   }
 
-  // ---------- 连续打卡天数（不算当天，从昨天起往前数）----------
+  // ---------- 连续打卡天数（不算当天，从昨天起往前数；统一口径见 calcConsecutiveDays）----------
   // 规则：
   //   - 当天未完成（常规任务）→ 不影响前面已数出的 streak，保留；但当天不参与结算奖励
-  //   - 前一天是假期（day_off 表有记录）→ 跳过，不计入 streak、不算中断
-  //   - 前一天未完成的任务全是一次性任务(once) → 例外跳过，不算中断
-  //   - 前一天没生成任何记录（周期外/未生成）→ 跳过继续数
+  //   - 前一天是假期 → 跳过；前一天未完成全是 once → 例外跳过；有常规未完成 → 中断
   //   - 只在当前学习周期内数；跨周期 break
   //   - 奖励按周期防重复：floor(streak/streakDays) > last_bonus_streak 才发
   const streakDays = fam.streak_days || 5;
@@ -734,52 +779,13 @@ export async function settleDay(childId, date) {
   let bonus = 0;
 
   if (todayAllDone) {
+    streak = await calcConsecutiveDays(childId, date, state.currentPlanId);
+
     // 取该孩子最近一次的已奖励周期数（防重复发奖）
     let lastBonus = 0;
     const { data: kidRow } = await supabase.from('children').select('last_bonus_streak')
       .eq('id', childId).maybeSingle();
     lastBonus = kidRow?.last_bonus_streak || 0;
-
-    // 预取 once 任务模板集合（用于判定"前一天未完成是否全是一次性任务"）
-    const { data: onceTmpls } = await supabase.from('task_templates').select('id,recurrence')
-      .eq('plan_id', state.currentPlanId);
-    const onceIds = new Set((onceTmpls || []).filter(t => t.recurrence === 'once').map(t => t.id));
-
-    // 预取当前周期内该孩子的所有假期日期
-    const dayOffDates = new Set();
-    if (state.currentPlanId) {
-      const { data: offs } = await supabase.from('day_off').select('date')
-        .eq('plan_id', state.currentPlanId).eq('child_id', childId);
-      (offs || []).forEach(o => dayOffDates.add(o.date));
-    }
-
-    const d = new Date(date + 'T00:00:00');
-    let guard = 0;
-    while (guard++ < 400) { // 安全上限，避免异常死循环
-      d.setDate(d.getDate() - 1);
-      const ds = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
-
-      // 1) 假期 → 跳过，不计 streak、不中断
-      if (dayOffDates.has(ds)) continue;
-
-      // 2) 查那天记录（当前周期内）
-      const { data: prev } = await supabase.from('daily_records').select('status,task_id')
-        .eq('child_id', childId).eq('date', ds)
-        .eq('plan_id', state.currentPlanId).neq('status', 'skipped');
-
-      // 3) 没记录（周期外/未生成）→ 跳过继续数（不算中断）
-      if (!prev || !prev.length) continue;
-
-      // 4) 有未完成 → 看是否全是一次性任务
-      const prevUnfinished = prev.filter(r => r.status !== 'verified');
-      if (prevUnfinished.length) {
-        const allOnce = prevUnfinished.every(r => onceIds.has(r.task_id));
-        if (allOnce) continue;     // 未完成的全是一次性任务 → 例外跳过
-        break;                     // 有常规任务未完成 → 中断
-      }
-      // 5) 全 verified → 连续+1
-      streak++;
-    }
 
     // 按周期防重复奖励：已连续满多少个 streakDays 周期，超过上次已发的就补发
     const bonusRound = Math.floor(streak / streakDays);

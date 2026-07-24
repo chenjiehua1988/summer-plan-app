@@ -1,7 +1,7 @@
 // ============================================================
 // 统计报表（按学习周期）：总进度、倒计时、按标签/科目、历史对比、近7天
 // ============================================================
-import { state, todayStr, hm, mdhm } from './supabase.js';
+import { state, todayStr, mdhm } from './supabase.js';
 import * as db from './db.js';
 import { viewFullPhoto } from './photo-viewer.js';
 
@@ -25,15 +25,16 @@ export async function renderStats(view) {
   const rate = total ? Math.round((verified / total) * 100) : 0;
   const points = eff.filter(r => r.status === 'verified').reduce((s, r) => s + (r.points || 0), 0);
   const skippedCount = records.length - eff.length;
-  const okDates = new Set(eff.filter(r => r.status === 'done' || r.status === 'verified').map(r => r.date));
-  const streak = calcStreak(okDates);
+  const today = todayStr();
+  // 连续打卡天数：统一口径（不算当天、假期跳过、once例外、当前周期内）
+  let streak = 0;
+  try { streak = await db.calcConsecutiveDays(childId, today, state.currentPlanId); } catch (e) {}
 
   // 假期天数
   let dayOffCount = 0;
   try { dayOffCount = (await db.fetchDayOffs(state.currentPlanId, childId)).length; } catch (e) {}
 
   // 倒计时/天数
-  const today = todayStr();
   let totalDays = 0, passedDays = 0, leftDays = null, progressPct = 0;
   if (plan?.start_date && plan?.end_date) {
     totalDays = Math.max(1, Math.round((new Date(plan.end_date) - new Date(plan.start_date)) / 86400000) + 1);
@@ -219,21 +220,3 @@ export async function renderStats(view) {
   }
 }
 
-function calcStreak(okDates) {
-  let streak = 0;
-  const d = new Date();
-  // 今天没打卡的话，从昨天开始数（不因今天还没打就清零）
-  if (!okDates.has(fmt(d))) d.setDate(d.getDate() - 1);
-  for (;;) {
-    const ds = fmt(d);
-    if (okDates.has(ds)) { streak++; d.setDate(d.getDate() - 1); }
-    else break;
-  }
-  return streak;
-}
-function fmt(d) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
