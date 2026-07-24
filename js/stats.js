@@ -94,7 +94,7 @@ export async function renderStats(view) {
 
     <div class="stat-cards">
       <div class="stat-card"><div class="stat-num">${rate}%</div><div class="stat-lab">验收完成率</div></div>
-      <div class="stat-card"><div class="stat-num">${streak}</div><div class="stat-lab">连续打卡(天)</div></div>
+      <div class="stat-card" id="streakCard" style="cursor:pointer"><div class="stat-num">${streak}</div><div class="stat-lab">连续打卡(天) ⓘ</div></div>
       <div class="stat-card"><div class="stat-num">${points}</div><div class="stat-lab">周期积分</div></div>
       <div class="stat-card"><div class="stat-num">${dayOffCount}</div><div class="stat-lab">假期天数</div></div>
     </div>
@@ -164,6 +164,18 @@ export async function renderStats(view) {
     <div class="section-title">验收操作明细</div>
     <div id="verifyArea"></div>
   `;
+  // 连续打卡卡片：点击查看中断明细
+  const streakCard = view.querySelector('#streakCard');
+  if (streakCard) {
+    let streakDetail = null;
+    streakCard.onclick = async () => {
+      if (streakDetail === null) {
+        try { const r = await db.calcConsecutiveDaysDetail(childId, today, state.currentPlanId); streakDetail = r.detail; }
+        catch (e) { streakDetail = []; }
+      }
+      showStreakPanel(streak, streakDetail);
+    };
+  }
   // 验收操作明细容器（提前声明，避免 TDZ）
   const vArea = view.querySelector('#verifyArea');
   // 任务下拉框：列出当前周期+孩子的任务
@@ -225,4 +237,39 @@ function fmt(d) {
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
+}
+
+// 连续打卡明细面板：点卡片查看哪天中断、中断原因
+function showStreakPanel(streak, detail) {
+  const statusText = {
+    ok: '✅ 全部完成',
+    break: '❌ 未完成中断',
+    dayoff: '🏖️ 假期',
+    none: '— 无任务',
+    onceOnly: '📌 仅一次性任务'
+  };
+  const rows = (detail && detail.length) ? detail.map(it => {
+    const extra = it.type === 'break' && it.unfinished?.length
+      ? `<div class="streak-break">未完成：${it.unfinished.map(u => `${u.title}（${u.status}）`).join('、')}</div>` : '';
+    return `<div class="streak-row streak-${it.type}">
+      <span class="streak-date">${it.date.slice(5)}</span>
+      <span class="streak-status">${statusText[it.type] || it.type}</span>
+      ${extra}
+    </div>`;
+  }).join('') : '<div class="empty">暂无历史数据。</div>';
+
+  const overlay = document.createElement('div');
+  overlay.className = 'photo-overlay';
+  overlay.style.background = 'rgba(0,0,0,.5)';
+  overlay.innerHTML = `
+    <div class="streak-panel">
+      <div class="streak-head">
+        <span>连续打卡 ${streak} 天</span>
+        <button class="btn-ghost btn-sm">关闭</button>
+      </div>
+      <div class="streak-hint">不含当天（当天未结束不统计）。从最近一天往前：</div>
+      <div class="streak-list">${rows}</div>
+    </div>`;
+  overlay.onclick = (e) => { if (e.target === overlay || e.target.tagName === 'BUTTON') overlay.remove(); };
+  document.body.appendChild(overlay);
 }

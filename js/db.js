@@ -693,14 +693,21 @@ export async function fetchCheckinsByDateRange(childId, fromDate, toDate) {
 // 规则：
 //   - 不算当天，从昨天起往前数
 //   - 前一天是假期（day_off 表）→ 跳过，不计入、不中断
-//   - 前一天未完成的任务全是一次性任务(once) → 例外跳过，不中断
+//   - 一次性任务(once)本身不参与打卡统计：做没做都不影响当天"是否全部完成"
 //   - 前一天没生成记录（周期外/未生成）→ 跳过继续数
 //   - 有常规任务未完成 → 中断
 //   - 只在当前学习周期内数；跨周期 break（靠 plan_id 过滤实现）
 // 返回连续天数（不含当天）
 export async function calcConsecutiveDays(childId, date, planId) {
+  const r = await calcConsecutiveDaysDetail(childId, date, planId);
+  return r.streak;
+}
+
+// 返回连续天数 + 每天的明细（供点击查看中断原因）
+// detail: [{ date, type: 'ok'|'break'|'dayoff'|'none'|'onceOnly', unfinished:[{title,status}] }]
+export async function calcConsecutiveDaysDetail(childId, date, planId) {
   const pid = planId || state.currentPlanId;
-  if (!pid) return 0;
+  if (!pid) return { streak: 0, detail: [] };
 
   // 预取 once 模板集合
   const { data: onceTmpls } = await supabase.from('task_templates').select('id,recurrence').eq('plan_id', pid);
@@ -713,33 +720,32 @@ export async function calcConsecutiveDays(childId, date, planId) {
   (offs || []).forEach(o => dayOffDates.add(o.date));
 
   let streak = 0;
+  const detail = [];
   const d = new Date(date + 'T00:00:00');
   let guard = 0;
-  const __diag = []; // 诊断日志
   while (guard++ < 400) {
     d.setDate(d.getDate() - 1);
     const ds = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 
-    if (dayOffDates.has(ds)) { __diag.push(`${ds}: 假期跳过`); continue; }
+    if (dayOffDates.has(ds)) { detail.push({ date: ds, type: 'dayoff' }); continue; }
 
     const { data: prev } = await supabase.from('daily_records').select('status,task_id,title')
       .eq('child_id', childId).eq('date', ds).eq('plan_id', pid).neq('status', 'skipped');
 
-    if (!prev || !prev.length) { __diag.push(`${ds}: 无记录跳过`); continue; }
+    if (!prev || !prev.length) { detail.push({ date: ds, type: 'none' }); continue; }
 
     // 一次性任务(once)本身不参与打卡统计:做没做都不影响当天"是否全部完成"
     // 只看常规任务是否都 verified
     const regular = prev.filter(r => !onceIds.has(r.task_id));
     const regUnfinished = regular.filter(r => r.status !== 'verified');
     if (regUnfinished.length) {
-      __diag.push(`${ds}: ❌中断! 常规未完成${regUnfinished.length}条 → ${regUnfinished.map(r=>`${r.title||r.task_id}=${r.status}`).join(', ')}`);
+      detail.push({ date: ds, type: 'break', unfinished: regUnfinished.map(r => ({ title: r.title, status: r.status })) });
       break;
     }
-    __diag.push(`${ds}: ✅常规全verified(${regular.length}条, once${prev.length-regular.length}条不计) streak=${streak+1}`);
+    detail.push({ date: ds, type: regular.length ? 'ok' : 'none' });
     streak++;
   }
-  console.log(`[连续天数诊断] child=${childId} plan=${pid} 起算日=${date} → streak=${streak}\n  ${__diag.join('\n  ')}`);
-  return streak;
+  return { streak, detail };
 }
 
 // ---------- 奖惩结算 ----------
