@@ -88,8 +88,8 @@ export async function renderToday(view) {
         let msg = label;
         if (r.deducted > 0) msg += `扣了${r.deducted}分（${r.unfinished}个未完成）`;
         else msg += '全部完成！';
-        if (r.bonus > 0) msg += `，连续${r.streak}天，奖励${r.bonus}分 🎉`;
-        else if (!r.deducted) msg += `（连续${r.streak}天）`;
+        if (r.bonus > 0) msg += `，之前连续${r.streak}天全部完成，奖励${r.bonus}分 🎉`;
+        else if (!r.deducted && r.streak > 0) msg += `（已连续${r.streak}天全部完成）`;
         msgs.push(msg);
       }
       if (!msgs.length) { toast('所有孩子今天都没有任务'); return; }
