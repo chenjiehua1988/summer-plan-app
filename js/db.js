@@ -715,24 +715,29 @@ export async function calcConsecutiveDays(childId, date, planId) {
   let streak = 0;
   const d = new Date(date + 'T00:00:00');
   let guard = 0;
+  const __diag = []; // 诊断日志
   while (guard++ < 400) {
     d.setDate(d.getDate() - 1);
     const ds = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 
-    if (dayOffDates.has(ds)) continue; // 假期跳过
+    if (dayOffDates.has(ds)) { __diag.push(`${ds}: 假期跳过`); continue; }
 
-    const { data: prev } = await supabase.from('daily_records').select('status,task_id')
+    const { data: prev } = await supabase.from('daily_records').select('status,task_id,title')
       .eq('child_id', childId).eq('date', ds).eq('plan_id', pid).neq('status', 'skipped');
 
-    if (!prev || !prev.length) continue; // 没记录跳过
+    if (!prev || !prev.length) { __diag.push(`${ds}: 无记录跳过`); continue; }
 
     const prevUnfinished = prev.filter(r => r.status !== 'verified');
     if (prevUnfinished.length) {
-      if (prevUnfinished.every(r => onceIds.has(r.task_id))) continue; // 全 once 未完成 → 跳过
-      break; // 常规未完成 → 中断
+      const allOnce = prevUnfinished.every(r => onceIds.has(r.task_id));
+      if (allOnce) { __diag.push(`${ds}: 未完成${prevUnfinished.length}条全是一次性任务,跳过`); continue; }
+      __diag.push(`${ds}: ❌中断! 未完成${prevUnfinished.length}条 → ${prevUnfinished.map(r=>`${r.title||r.task_id}=${r.status}${onceIds.has(r.task_id)?'(once)':''}`).join(', ')}`);
+      break;
     }
+    __diag.push(`${ds}: ✅全verified(${prev.length}条) streak=${streak+1}`);
     streak++;
   }
+  console.log(`[连续天数诊断] child=${childId} plan=${pid} 起算日=${date} → streak=${streak}\n  ${__diag.join('\n  ')}`);
   return streak;
 }
 
