@@ -363,7 +363,7 @@ textarea.checkin-note, textarea.vnote { width: 100%; padding: 9px; border: 1px s
   font-weight: 600; font-size: 16px; border-bottom: 1px solid var(--border,#eee); }
 .streak-hint { padding: 8px 16px; font-size: 12px; color: var(--muted,#999); }
 .streak-list { overflow-y: auto; padding: 4px 12px 14px; }
-.streak-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 12px; padding: 10px 8px;
+.streak-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 8px;
   border-bottom: 1px solid var(--border,#f0f0f0); }
 .streak-date { font-weight: 600; min-width: 52px; }
 .streak-status { font-size: 13px; flex: 1; }
