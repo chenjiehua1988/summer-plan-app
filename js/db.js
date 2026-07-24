@@ -727,14 +727,15 @@ export async function calcConsecutiveDays(childId, date, planId) {
 
     if (!prev || !prev.length) { __diag.push(`${ds}: 无记录跳过`); continue; }
 
-    const prevUnfinished = prev.filter(r => r.status !== 'verified');
-    if (prevUnfinished.length) {
-      const allOnce = prevUnfinished.every(r => onceIds.has(r.task_id));
-      if (allOnce) { __diag.push(`${ds}: 未完成${prevUnfinished.length}条全是一次性任务,跳过`); continue; }
-      __diag.push(`${ds}: ❌中断! 未完成${prevUnfinished.length}条 → ${prevUnfinished.map(r=>`${r.title||r.task_id}=${r.status}${onceIds.has(r.task_id)?'(once)':''}`).join(', ')}`);
+    // 一次性任务(once)本身不参与打卡统计:做没做都不影响当天"是否全部完成"
+    // 只看常规任务是否都 verified
+    const regular = prev.filter(r => !onceIds.has(r.task_id));
+    const regUnfinished = regular.filter(r => r.status !== 'verified');
+    if (regUnfinished.length) {
+      __diag.push(`${ds}: ❌中断! 常规未完成${regUnfinished.length}条 → ${regUnfinished.map(r=>`${r.title||r.task_id}=${r.status}`).join(', ')}`);
       break;
     }
-    __diag.push(`${ds}: ✅全verified(${prev.length}条) streak=${streak+1}`);
+    __diag.push(`${ds}: ✅常规全verified(${regular.length}条, once${prev.length-regular.length}条不计) streak=${streak+1}`);
     streak++;
   }
   console.log(`[连续天数诊断] child=${childId} plan=${pid} 起算日=${date} → streak=${streak}\n  ${__diag.join('\n  ')}`);
