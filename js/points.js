@@ -80,7 +80,13 @@ export async function renderPoints(container, childId) {
         <input type="date" id="ledgerTo" value="${today}" class="detail-date-input">
         <button class="btn-primary btn-sm" id="btnLedger">查询</button>
       </div>
-      <select id="ledgerFilter" class="detail-filter-select"><option value="">全部</option></select>
+      <div class="detail-query-row">
+        <select id="ledgerPlan" class="detail-filter-select">
+          <option value="">全部周期</option>
+          ${(state.plans||[]).map(p => `<option value="${p.id}" ${p.id===state.currentPlanId?'':''}>${p.name}</option>`).join('')}
+        </select>
+        <select id="ledgerFilter" class="detail-filter-select"><option value="">全部任务</option></select>
+      </div>
     </div>
     <div id="ledgerArea"></div>
 
@@ -136,6 +142,9 @@ export async function renderPoints(container, childId) {
   // 加系统选项
   const sysOpt = document.createElement('option'); sysOpt.value = '__system__'; sysOpt.textContent = '系统奖惩'; filterSel.appendChild(sysOpt);
 
+  // plan_id → 周期名 映射
+  const planName = id => (state.plans||[]).find(p => p.id === id)?.name || '未知周期';
+
   // 渲染流水列表
   function renderLedger(list) {
     const area = container.querySelector('#ledgerArea');
@@ -143,7 +152,7 @@ export async function renderPoints(container, childId) {
     area.innerHTML = `<ul class="ledger-list">${list.map(l => `
       <li class="ledger-row">
         <div><div class="ledger-reason">${l.reason}</div>
-        <small>${mdhm(l.created_at)}</small></div>
+        <small>${mdhm(l.created_at)} · ${planName(l.plan_id)}</small></div>
         <div class="ledger-delta ${l.delta>0?'plus':'minus'}">${l.delta>0?'+':''}${l.delta}</div>
       </li>`).join('')}</ul>`;
   }
@@ -157,7 +166,7 @@ export async function renderPoints(container, childId) {
     area.innerHTML = `<ul class="ledger-list">${list.map(rw => `
       <li class="ledger-row">
         <div><div class="ledger-reason">${rw.name}</div>
-        <small>${mdhm(rw.redeemed_at)}</small></div>
+        <small>${mdhm(rw.redeemed_at)} · ${planName(rw.plan_id)}</small></div>
         <div class="ledger-delta minus">-${rw.cost_points}</div>
       </li>`).join('')}</ul>`;
   }
@@ -167,13 +176,14 @@ export async function renderPoints(container, childId) {
     const from = container.querySelector('#ledgerFrom').value;
     const to = container.querySelector('#ledgerTo').value;
     const kw = filterSel.value;
+    const planId = container.querySelector('#ledgerPlan').value;
     container.querySelector('#ledgerArea').innerHTML = `<div class="loading">加载中…</div>`;
     container.querySelector('#rewardsArea').innerHTML = `<div class="loading">加载中…</div>`;
     let [list, rwList] = [[], []];
     try {
       [list, rwList] = await Promise.all([
-        db.fetchLedgerRange(childId, from, to),
-        db.fetchRewardsRange(childId, from, to)
+        db.fetchLedgerRange(childId, from, to, planId || undefined),
+        db.fetchRewardsRange(childId, from, to, planId || undefined)
       ]);
     } catch (e) {}
     if (kw === '__system__') list = list.filter(l => (l.reason||'').includes('连续') || (l.reason||'').includes('未完成') || (l.reason||'').includes('惩罚扣分'));

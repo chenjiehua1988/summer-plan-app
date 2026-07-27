@@ -394,9 +394,11 @@ export async function fetchLedger(childId) {
   return data || [];
 }
 // 按日期范围查积分流水（用于积分明细，避免一次查全部）
-export async function fetchLedgerRange(childId, fromDate, toDate) {
+// planId: 指定则只查该周期，省略/空则查全部周期
+export async function fetchLedgerRange(childId, fromDate, toDate, planId) {
   let q = supabase.from('point_ledger').select('*').eq('child_id', childId)
     .order('created_at', { ascending: false });
+  if (planId) q = q.eq('plan_id', planId);
   if (fromDate) q = q.gte('created_at', fromDate + 'T00:00:00');
   if (toDate) q = q.lte('created_at', toDate + 'T23:59:59');
   const { data, error } = await q;
@@ -415,9 +417,10 @@ export async function fetchRewards(childId) {
   if (error) throw error;
   return data || [];
 }
-export async function fetchRewardsRange(childId, fromDate, toDate) {
+export async function fetchRewardsRange(childId, fromDate, toDate, planId) {
   let q = supabase.from('rewards').select('*').eq('child_id', childId)
     .order('redeemed_at', { ascending: false });
+  if (planId) q = q.eq('plan_id', planId);
   if (fromDate) q = q.gte('redeemed_at', fromDate + 'T00:00:00');
   if (toDate) q = q.lte('redeemed_at', toDate + 'T23:59:59');
   const { data, error } = await q;
@@ -434,6 +437,7 @@ export async function redeemReward(childId, shopItem) {
   if (e1) throw e1;
   const { data, error: e2 } = await supabase.from('rewards').insert({
     family_id: state.family.id, child_id: childId, shop_id: shopItem.id || null,
+    plan_id: state.currentPlanId || null,
     name: shopItem.name, cost_points: shopItem.cost_points, redeemed_by: actorName()
   }).select().single();
   if (e2) throw e2;
@@ -897,6 +901,7 @@ export async function decideRedeemRequest(req, approve) {
     // rewards 记录
     const { error: e2 } = await supabase.from('rewards').insert({
       family_id: state.family.id, child_id: req.child_id, shop_id: req.shop_id || null,
+      plan_id: state.currentPlanId || null,
       name: req.name, cost_points: req.cost_points, redeemed_by: actorName()
     });
     if (e2) throw e2;
