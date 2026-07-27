@@ -116,7 +116,8 @@ export async function renderPoints(container, childId) {
         const reason = prompt(isDeduct ? '扣分原因（如：错题太多/抄答案）' : '加分原因（如：额外完成/表现好）') || (isDeduct ? '惩罚扣分' : '手动奖励');
         if (!confirm(`确认${isDeduct ? '扣' : '加'} ${Math.abs(pts)} 分？\n原因：${reason}`)) return;
         await supabase.from('point_ledger').insert({
-          family_id: state.family.id, child_id: childId, delta: -pts,
+          family_id: state.family.id, child_id: childId, plan_id: state.currentPlanId || null,
+          delta: -pts,
           reason: `${isDeduct ? '惩罚扣分' : '手动奖励'}：${reason}`, created_by: state.role
         });
         toast(`已${isDeduct ? '扣' : '加'} ${Math.abs(pts)} 分`);

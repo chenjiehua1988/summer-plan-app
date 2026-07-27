@@ -426,7 +426,7 @@ export async function redeemReward(childId, shopItem) {
   // shopItem: { id, name, cost_points }
   // 扣减积分：写一条负数流水 + 一条奖励记录
   const { error: e1 } = await supabase.from('point_ledger').insert({
-    family_id: state.family.id, child_id: childId,
+    family_id: state.family.id, child_id: childId, plan_id: state.currentPlanId || null,
     delta: -shopItem.cost_points, reason: '兑换奖励：' + shopItem.name, created_by: actorName()
   });
   if (e1) throw e1;
@@ -780,7 +780,8 @@ export async function settleDay(childId, date) {
   const dateShort = date.slice(5); // MM-DD
   for (const r of unfinished) {
     await supabase.from('point_ledger').insert({
-      family_id: fam.id, child_id: childId, delta: -r.points,
+      family_id: fam.id, child_id: childId, plan_id: state.currentPlanId || null,
+      delta: -r.points,
       reason: `${dateShort}未完成：${r.title}`, created_by: actorName()
     });
     deducted += r.points;
@@ -812,7 +813,8 @@ export async function settleDay(childId, date) {
     const bonusRound = Math.floor(streak / streakDays);
     if (bonusRound > lastBonus) {
       await supabase.from('point_ledger').insert({
-        family_id: fam.id, child_id: childId, delta: streakBonus,
+        family_id: fam.id, child_id: childId, plan_id: state.currentPlanId || null,
+        delta: streakBonus,
         reason: `${dateShort}连续${streakDays}天全部完成奖励`, created_by: '系统'
       });
       await supabase.from('children').update({ last_bonus_streak: bonusRound }).eq('id', childId);
@@ -884,7 +886,7 @@ export async function decideRedeemRequest(req, approve) {
     if (req.cost_points > bal) throw new Error('孩子积分不足（当前 ' + bal + ' 分）');
     // 扣分流水
     const { error: e1 } = await supabase.from('point_ledger').insert({
-      family_id: state.family.id, child_id: req.child_id,
+      family_id: state.family.id, child_id: req.child_id, plan_id: state.currentPlanId || null,
       delta: -req.cost_points, reason: '兑换奖励：' + req.name, created_by: actorName()
     });
     if (e1) throw e1;
