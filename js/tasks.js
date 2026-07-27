@@ -136,28 +136,17 @@ export async function renderToday(view) {
         else openCheckinPanel(id, r, records, el);
       });
     });
-    // 父母改当天说明
+    // 父母改当天说明（打开面板：文字+录音+图片）
     el.querySelector('.edit-instr')?.addEventListener('click', async (e) => {
       e.stopPropagation();
-      const v = prompt('当天要求说明（如：今天背第3课）', r.instruction || '');
-      if (v === null) return;
-      try {
-        await db.updateRecord(id, { instruction: v || null });
-        // 写一条操作流水（说明变更）
-        try {
-          await supabase.from('verify_logs').insert({
-            family_id: state.family.id, record_id: id, child_id: r.child_id, title: r.title,
-            plan_id: r.plan_id || null,
-            action: 'instruction', note: v || '(清除说明)', operator: actorName()
-          });
-        } catch (le) { console.warn('log failed', le.message); }
-        r.instruction = v || null; renderToday(document.getElementById('view')); toast('已更新');
-      } catch (e) { toast('更新失败：' + e.message); }
+      openInstructionPanel(id, r);
     });
     // 查看已有照片/录音
     el.querySelector('.task-photos')?.addEventListener('click', (e) => {
       e.stopPropagation();
-      if (e.target.dataset.viewaudio) viewAudios(r.audios || []);
+      if (e.target.dataset.viewinstraudio) viewAudios(r.instruction_audios || []);
+      else if (e.target.dataset.viewinstrphoto) viewPhotos(r.instruction_photos || []);
+      else if (e.target.dataset.viewaudio) viewAudios(r.audios || []);
       else viewPhotos(r.photos || []);
     });
   });
@@ -241,6 +230,11 @@ function taskRow(r) {
       <div class="task-body">
         <div class="task-title">${r.title}</div>
         ${r.instruction ? `<div class="task-instruction">❗ ${r.instruction}${isParent ? ` <b class="edit-instr" data-instr="${r.id}">改</b>` : ''}</div>` : (isParent ? `<div class="task-instruction"><b class="edit-instr" data-instr="${r.id}">+加说明</b></div>` : '')}
+        ${(r.instruction_photos||[]).length || (r.instruction_audios||[]).length ? `
+          <div class="task-meta">
+            ${(r.instruction_photos||[]).length ? `<span class="task-photos link" data-viewinstrphoto="1">📷说明${r.instruction_photos.length}</span>` : ''}
+            ${(r.instruction_audios||[]).length ? `<span class="task-photos link" data-viewinstraudio="1">🎙说明${r.instruction_audios.length}</span>` : ''}
+          </div>` : ''}
         <div class="task-meta">
           <span class="subj subj-${r.subject}">${r.subject}</span>
           ${tagsHtml}
@@ -258,6 +252,188 @@ function taskRow(r) {
       ${actBtn}
       <div class="task-pts">${skipped ? '' : '+' + r.points}</div>
     </li>`;
+}
+
+// 说明编辑面板：文字+录音+图片（父母编辑每天任务说明）
+function openInstructionPanel(id, r) {
+  const st = {
+    existingPhotos: [...(r.instruction_photos || [])],
+    existingAudios: [...(r.instruction_audios || [])],
+    photoFiles: [], audioBlobs: [], recorder: null,
+    recMime: MediaRecorder.isTypeSupported('audio/webm') ? 'webm'
+      : MediaRecorder.isTypeSupported('audio/mp4') ? 'mp4' : '',
+    recording: false, recTimer: null, recSec: 0
+  };
+
+  const overlay = document.createElement('div');
+  overlay.className = 'checkin-overlay';
+  overlay.innerHTML = `
+    <div class="checkin-sheet">
+      <div class="checkin-head">
+        <span class="checkin-title">编辑说明：${r.title}</span>
+        <button class="btn-ghost btn-sm" id="instClose">取消</button>
+      </div>
+      <textarea class="checkin-note" placeholder="说明文字（可选）" rows="2">${r.instruction || ''}</textarea>
+      <div class="checkin-actions">
+        <button class="btn-ghost btn-sm" id="instPhoto">📷 拍照</button>
+        <button class="btn-ghost btn-sm" id="instGallery">🖼 选相册</button>
+        <button class="btn-ghost btn-sm" id="instRec">🎙 录音</button>
+        <button class="btn-ghost btn-sm" id="instAudioFile">🎵 选音频</button>
+      </div>
+      <div class="checkin-rec" id="instRecBox" style="display:none">
+        <span id="instRecTime">00:00</span>
+        <button class="btn-primary btn-sm" id="instRecToggle">开始</button>
+        <span class="checkin-hint" id="instRecHint"></span>
+      </div>
+      <div class="checkin-picked" id="instPicked"></div>
+      <button class="btn-primary checkin-submit" id="instSubmit">保存说明</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  const $ = sel => overlay.querySelector(sel);
+
+  const close = () => {
+    if (st.recording) { toast('录音中，请先停止录音再关闭'); return; }
+    if (st.audioBlobs.length || st.photoFiles.length) {
+      if (!confirm('已有未保存的录音/图片，确定放弃？')) return;
+    }
+    stopRecIf(); overlay.remove();
+  };
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  $('#instClose').onclick = close;
+
+  function renderPicked() {
+    const eph = st.existingPhotos.map((u, i) =>
+      `<span class="pick-thumb"><img src="${u}" data-view="${i}"><b data-rm-ephoto="${i}">×</b></span>`).join('');
+    const eau = st.existingAudios.map((u, i) =>
+      `<span class="pick-chip">🎙${i+1}<b data-rm-eaudio="${i}">×</b></span>`).join('');
+    const ph = st.photoFiles.map((f, i) => {
+      const url = URL.createObjectURL(f);
+      return `<span class="pick-thumb"><img src="${url}"><b data-rm-photo="${i}">×</b></span>`;
+    }).join('');
+    const au = st.audioBlobs.map((a, i) =>
+      `<span class="pick-chip">🎙${a.sec}秒<b data-rm-audio="${i}">×</b></span>`).join('');
+    $('#instPicked').innerHTML = eph + eau + ph + au;
+    overlay.querySelectorAll('[data-view]').forEach(img => img.onclick = e => {
+      e.stopPropagation();
+      viewFullPhoto(st.existingPhotos, +img.dataset.view);
+    });
+    overlay.querySelectorAll('[data-rm-ephoto]').forEach(b => b.onclick = () => { st.existingPhotos.splice(+b.dataset.rmEphoto, 1); renderPicked(); });
+    overlay.querySelectorAll('[data-rm-eaudio]').forEach(b => b.onclick = () => { st.existingAudios.splice(+b.dataset.rmEaudio, 1); renderPicked(); });
+    overlay.querySelectorAll('[data-rm-photo]').forEach(b => b.onclick = () => { st.photoFiles.splice(+b.dataset.rmPhoto, 1); renderPicked(); });
+    overlay.querySelectorAll('[data-rm-audio]').forEach(b => b.onclick = () => { st.audioBlobs.splice(+b.dataset.rmAudio, 1); renderPicked(); });
+  }
+  renderPicked();
+
+  // 拍照
+  $('#instPhoto').onclick = () => {
+    const input = document.createElement('input');
+    input.type = 'file'; input.accept = 'image/*'; input.multiple = true; input.capture = 'environment';
+    input.onchange = () => { st.photoFiles.push(...input.files); renderPicked(); };
+    input.click();
+  };
+  // 选相册
+  $('#instGallery').onclick = () => {
+    const input = document.createElement('input');
+    input.type = 'file'; input.accept = 'image/*'; input.multiple = true;
+    input.onchange = () => { st.photoFiles.push(...input.files); renderPicked(); };
+    input.click();
+  };
+  // 选音频
+  $('#instAudioFile').onclick = () => {
+    const input = document.createElement('input');
+    input.type = 'file'; input.accept = 'audio/*';
+    input.onchange = async () => {
+      for (const f of input.files) {
+        const sec = await audioDuration(f);
+        st.audioBlobs.push({ blob: f, ext: (f.name.split('.').pop() || 'mp4').toLowerCase(), sec });
+      }
+      renderPicked();
+    };
+    input.click();
+  };
+  // 录音
+  const recBox = $('#instRecBox');
+  const recToggle = $('#instRecToggle');
+  const recTime = $('#instRecTime');
+  const recHint = $('#instRecHint');
+  let micStream = null;
+  $('#instRec').onclick = async () => {
+    recBox.style.display = '';
+    if (!micStream) {
+      try { micStream = await navigator.mediaDevices.getUserMedia({ audio: true }); recHint.textContent = ''; }
+      catch (e) { recHint.textContent = '无法访问麦克风，请用「选音频」'; return; }
+    }
+  };
+  recToggle.onclick = () => {
+    if (!micStream) return;
+    if (!st.recording) {
+      navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+        const chunks = [];
+        const mr = new MediaRecorder(stream, st.recMime ? { mimeType: 'audio/' + st.recMime } : undefined);
+        mr.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+        mr.onstop = () => {
+          const chunkCopy = chunks.slice();
+          const blob = new Blob(chunkCopy, { type: 'audio/' + st.recMime });
+          blob.arrayBuffer().then(buf => {
+            const independentBlob = new Blob([buf], { type: 'audio/' + st.recMime });
+            st.audioBlobs.push({ blob: independentBlob, ext: st.recMime, sec: st.recSec });
+            renderPicked();
+          });
+          stream.getTracks().forEach(t => t.stop());
+        };
+        st.recorder = mr; st.recSec = 0; mr.start(); st.recording = true;
+        recToggle.textContent = '停止';
+        st.recTimer = setInterval(() => { st.recSec++; recTime.textContent = fmtSec(st.recSec); }, 1000);
+      }).catch(() => { recHint.textContent = '无法访问麦克风'; });
+    } else { stopRecIf(); }
+  };
+  function stopRecIf() {
+    if (st.recording && st.recorder && st.recorder.state !== 'inactive') st.recorder.stop();
+    st.recording = false;
+    if (st.recTimer) { clearInterval(st.recTimer); st.recTimer = null; }
+    if (recToggle) recToggle.textContent = '开始';
+  }
+
+  // 保存
+  $('#instSubmit').onclick = async () => {
+    const text = overlay.querySelector('.checkin-note').value.trim();
+    stopRecIf();
+    const btn = $('#instSubmit');
+    btn.disabled = true; btn.textContent = '保存中…';
+    try {
+      let newPhotos = [], newAudios = [];
+      if (st.photoFiles.length) {
+        toast(`上传 ${st.photoFiles.length} 张图片…`);
+        for (const f of st.photoFiles) newPhotos.push(await db.uploadInstructionPhoto(id, f));
+      }
+      if (st.audioBlobs.length) {
+        toast(`上传 ${st.audioBlobs.length} 段录音…`);
+        for (let i = 0; i < st.audioBlobs.length; i++) {
+          const a = st.audioBlobs[i];
+          btn.textContent = `上传录音 ${i+1}/${st.audioBlobs.length}…`;
+          newAudios.push(await db.uploadInstructionAudio(id, a.blob, a.ext));
+        }
+      }
+      const allPhotos = [...st.existingPhotos, ...newPhotos];
+      const allAudios = [...st.existingAudios, ...newAudios];
+      await db.updateRecord(id, {
+        instruction: text || null,
+        instruction_photos: allPhotos,
+        instruction_audios: allAudios
+      });
+      // 写操作流水
+      try {
+        await supabase.from('verify_logs').insert({
+          family_id: state.family.id, record_id: id, child_id: r.child_id, title: r.title,
+          plan_id: r.plan_id || null,
+          action: 'instruction', note: text || '(清除说明)', operator: actorName()
+        });
+      } catch (le) { console.warn('log failed', le.message); }
+      toast('说明已更新');
+      overlay.remove();
+      renderToday(document.getElementById('view'));
+    } catch (e) { toast('保存失败：' + e.message); btn.disabled = false; btn.textContent = '保存说明'; }
+  };
 }
 
 // 打卡面板：底部抽屉，备注+拍照+录音+完成（都是可选）
@@ -295,7 +471,13 @@ function openCheckinPanel(id, r, records, el) {
   document.body.appendChild(overlay);
   const $ = sel => overlay.querySelector(sel);
 
-  const close = () => { stopRecIf(); overlay.remove(); };
+  const close = () => {
+    if (st.recording) { toast('录音中，请先停止录音再关闭'); return; }
+    if (st.audioBlobs.length || st.photoFiles.length || st.existingPhotos.length || st.existingAudios.length) {
+      if (!confirm('已有未提交的照片/录音，确定放弃？')) return;
+    }
+    stopRecIf(); overlay.remove();
+  };
   overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
   $('#ckClose').onclick = close;
 

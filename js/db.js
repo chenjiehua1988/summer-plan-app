@@ -640,6 +640,33 @@ export async function uploadAudio(recordId, blob, ext) {
   const { data: pub } = supabase.storage.from('verify-photos').getPublicUrl(path);
   return pub.publicUrl;
 }
+// 说明附件上传（照片）
+export async function uploadInstructionPhoto(recordId, file) {
+  const blob = await compressImage(file);
+  const fam = state.family.id;
+  const ts = Date.now();
+  const path = `instr/${fam}/${recordId}/${ts}_${Math.random().toString(36).slice(2, 6)}.jpg`;
+  const { error } = await supabase.storage.from('verify-photos').upload(path, blob, {
+    contentType: 'image/jpeg', upsert: false
+  });
+  if (error) throw error;
+  const { data: pub } = supabase.storage.from('verify-photos').getPublicUrl(path);
+  return pub.publicUrl;
+}
+// 说明附件上传（录音）
+export async function uploadInstructionAudio(recordId, blob, ext) {
+  const fam = state.family.id;
+  const ts = Date.now();
+  const path = `instr/${fam}/${recordId}/${ts}_${Math.random().toString(36).slice(2, 6)}.${ext}`;
+  const uploadPromise = supabase.storage.from('verify-photos').upload(path, blob, {
+    contentType: blob.type || `audio/${ext}`, upsert: false
+  });
+  const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('上传超时')), 60000));
+  const { error } = await Promise.race([uploadPromise, timeoutPromise]);
+  if (error) throw error;
+  const { data: pub } = supabase.storage.from('verify-photos').getPublicUrl(path);
+  return pub.publicUrl;
+}
 // 给记录追加音频路径
 export async function appendAudios(recordId, newUrls) {
   const { data: rec, error: e1 } = await supabase
