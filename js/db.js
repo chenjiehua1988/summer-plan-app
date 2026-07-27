@@ -334,6 +334,7 @@ export async function verifyRecord(id, status, note) {
   try {
     await supabase.from('verify_logs').insert({
       family_id: state.family.id, record_id: id, child_id: data.child_id, title: data.title,
+      plan_id: data.plan_id || null,
       action: status === 'verified' ? 'pass' : 'reject',
       note: note || null, operator: actorName()
     });
@@ -364,6 +365,7 @@ export async function revokeVerify(id) {
   try {
     await supabase.from('verify_logs').insert({
       family_id: state.family.id, record_id: id, child_id: rec?.child_id || data.child_id, title: rec?.title || data.title,
+      plan_id: rec?.plan_id || data.plan_id || null,
       action: 'revoke', note: '撤销验收，打回重写', operator: actorName()
     });
   } catch (e) { console.warn('verify_log failed', e.message); }
@@ -679,9 +681,10 @@ export async function fetchCheckinsByDate(childId, date) {
   if (error) throw error;
   return data || [];
 }
-export async function fetchCheckinsByDateRange(childId, fromDate, toDate) {
+export async function fetchCheckinsByDateRange(childId, fromDate, toDate, planId) {
   let q = supabase.from('checkins').select('*').eq('child_id', childId)
     .order('created_at', { ascending: false });
+  if (planId) q = q.eq('plan_id', planId);
   if (fromDate) q = q.gte('created_at', fromDate + 'T00:00:00');
   if (toDate) q = q.lte('created_at', toDate + 'T23:59:59');
   const { data, error } = await q;
@@ -839,9 +842,10 @@ export async function fetchVerifyLogsByDate(childId, date) {
   if (error) throw error;
   return data || [];
 }
-export async function fetchVerifyLogsByRange(childId, fromDate, toDate) {
+export async function fetchVerifyLogsByRange(childId, fromDate, toDate, planId) {
   let q = supabase.from('verify_logs').select('*').eq('child_id', childId)
     .order('created_at', { ascending: false });
+  if (planId) q = q.eq('plan_id', planId);
   if (fromDate) q = q.gte('created_at', fromDate + 'T00:00:00');
   if (toDate) q = q.lte('created_at', toDate + 'T23:59:59');
   const { data, error } = await q;

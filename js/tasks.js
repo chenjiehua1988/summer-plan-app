@@ -147,6 +147,7 @@ export async function renderToday(view) {
         try {
           await supabase.from('verify_logs').insert({
             family_id: state.family.id, record_id: id, child_id: r.child_id, title: r.title,
+            plan_id: r.plan_id || null,
             action: 'instruction', note: v || '(清除说明)', operator: actorName()
           });
         } catch (le) { console.warn('log failed', le.message); }

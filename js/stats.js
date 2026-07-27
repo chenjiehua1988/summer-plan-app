@@ -206,7 +206,7 @@ export async function renderStats(view) {
     const area = view.querySelector('#detailArea');
     area.innerHTML = `<div class="loading">加载中…</div>`;
     let list = [];
-    try { list = await db.fetchCheckinsByDateRange(state.currentChildId, fromDate, toDate); } catch (e) {}
+    try { list = await db.fetchCheckinsByDateRange(state.currentChildId, fromDate, toDate, state.currentPlanId); } catch (e) {}
     if (kw) list = list.filter(c => c.title === kw);
     if (!list.length) { area.innerHTML = `<div class="empty">${fromDate}~${toDate} 没有打卡记录。</div>`; return; }
     area.innerHTML = list.map(c => `
@@ -227,7 +227,7 @@ export async function renderStats(view) {
   async function loadVerify(fromDate, toDate, kw) {
     vArea.innerHTML = `<div class="loading">加载中…</div>`;
     let list = [];
-    try { list = await db.fetchVerifyLogsByRange(state.currentChildId, fromDate, toDate); } catch (e) {}
+    try { list = await db.fetchVerifyLogsByRange(state.currentChildId, fromDate, toDate, state.currentPlanId); } catch (e) {}
     if (kw) list = list.filter(l => l.title === kw);
     if (!list.length) { vArea.innerHTML = `<div class="empty">${fromDate}~${toDate} 没有验收操作。</div>`; return; }
     const actionText = { pass: '通过', reject: '打回', revoke: '撤销', instruction: '改说明' };
