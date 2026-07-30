@@ -157,7 +157,8 @@ async function openHistoryPanel(r) {
   const overlay = document.createElement('div');
   overlay.className = 'photo-overlay';
   overlay.innerHTML = `<div class="photo-bar"><span>${r.title} · 打卡历史</span><button class="btn-ghost btn-sm">关闭</button></div><div class="loading">加载中…</div>`;
-  overlay.onclick = (e) => { if (e.target === overlay || e.target.tagName === 'BUTTON') overlay.remove(); };
+  document.body.style.overflow = 'hidden';
+  overlay.onclick = (e) => { if (e.target === overlay || e.target.tagName === 'BUTTON') { document.body.style.overflow = ''; overlay.remove(); } };
   document.body.appendChild(overlay);
   let list = [];
   try { list = await db.fetchCheckins(r.id); } catch (e) {}
@@ -288,15 +289,17 @@ function openInstructionPanel(id, r) {
       <div class="checkin-picked" id="instPicked"></div>
       <button class="btn-primary checkin-submit" id="instSubmit">保存说明</button>
     </div>`;
+  document.body.style.overflow = 'hidden';
   document.body.appendChild(overlay);
   const $ = sel => overlay.querySelector(sel);
 
+  const doClose = () => { stopRecIf(); document.body.style.overflow = ''; overlay.remove(); };
   const close = () => {
     if (st.recording) { toast('录音中，请先停止录音再关闭'); return; }
     if (st.audioBlobs.length || st.photoFiles.length) {
       if (!confirm('已有未保存的录音/图片，确定放弃？')) return;
     }
-    stopRecIf(); overlay.remove();
+    doClose();
   };
   overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
   $('#instClose').onclick = close;
@@ -430,7 +433,7 @@ function openInstructionPanel(id, r) {
         });
       } catch (le) { console.warn('log failed', le.message); }
       toast('说明已更新');
-      overlay.remove();
+      document.body.style.overflow = ''; overlay.remove();
       renderToday(document.getElementById('view'));
     } catch (e) { toast('保存失败：' + e.message); btn.disabled = false; btn.textContent = '保存说明'; }
   };
@@ -468,15 +471,17 @@ function openCheckinPanel(id, r, records, el) {
       <div class="checkin-picked" id="ckPicked"></div>
       <button class="btn-primary checkin-submit" id="ckSubmit">完成打卡</button>
     </div>`;
+  document.body.style.overflow = 'hidden';
   document.body.appendChild(overlay);
   const $ = sel => overlay.querySelector(sel);
 
+  const doClose = () => { stopRecIf(); document.body.style.overflow = ''; overlay.remove(); };
   const close = () => {
     if (st.recording) { toast('录音中，请先停止录音再关闭'); return; }
     if (st.audioBlobs.length || st.photoFiles.length || st.existingPhotos.length || st.existingAudios.length) {
       if (!confirm('已有未提交的照片/录音，确定放弃？')) return;
     }
-    stopRecIf(); overlay.remove();
+    doClose();
   };
   overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
   $('#ckClose').onclick = close;
@@ -628,7 +633,7 @@ function openCheckinPanel(id, r, records, el) {
       }
       r.note = note || null; r.photos = allPhotos; r.audios = allAudios;
       toast('已打卡 ✓');
-      overlay.remove();
+      document.body.style.overflow = ''; overlay.remove();
       renderToday(document.getElementById('view'));
     } catch (e) { toast('保存失败：' + e.message); btn.disabled = false; btn.textContent = '完成打卡'; }
   };
@@ -656,8 +661,9 @@ function openDayOffRangePanel(childId, view) {
       <input class="checkin-note" id="drReason" type="text" placeholder="原因（可选，如 旅游/考试）" />
       <button class="btn-primary checkin-submit" id="drSubmit">设为假期</button>
     </div>`;
+  document.body.style.overflow = 'hidden';
   document.body.appendChild(overlay);
-  const close = () => overlay.remove();
+  const close = () => { document.body.style.overflow = ''; overlay.remove(); };
   overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
   overlay.querySelector('#drClose').onclick = close;
   overlay.querySelector('#drSubmit').onclick = async () => {
@@ -669,7 +675,7 @@ function openDayOffRangePanel(childId, view) {
     try {
       const n = await db.markDayOffRange(state.currentPlanId, childId, s, e, reason);
       toast(`${s} ~ ${e} 共 ${n} 天已设为假期`);
-      overlay.remove();
+      document.body.style.overflow = ''; overlay.remove();
       renderToday(view);
     } catch (err) { toast('操作失败：' + err.message); }
   };
@@ -695,10 +701,11 @@ function viewPhotos(photos) {
   overlay.innerHTML = `
     <div class="photo-bar"><span>照片 ${photos.length} 张（点图放大）</span><button class="btn-ghost btn-sm">关闭</button></div>
     <div class="photo-grid">${photos.map((u,i) => `<img src="${u}" data-i="${i}">`).join('')}</div>`;
-  overlay.onclick = (e) => { if (e.target === overlay || e.target.tagName === 'BUTTON') overlay.remove(); };
+  overlay.onclick = (e) => { if (e.target === overlay || e.target.tagName === 'BUTTON') { document.body.style.overflow = ''; overlay.remove(); } };
   overlay.querySelectorAll('img').forEach(img => {
     img.onclick = (e) => { e.stopPropagation(); viewFullPhoto(photos, +img.dataset.i); };
   });
+  document.body.style.overflow = 'hidden';
   document.body.appendChild(overlay);
 }
 function viewAudios(audios) {
@@ -708,7 +715,8 @@ function viewAudios(audios) {
   overlay.innerHTML = `
     <div class="photo-bar"><span>录音 ${audios.length} 段</span><button class="btn-ghost btn-sm">关闭</button></div>
     <div class="audio-list">${audios.map(u => `<audio controls src="${u}" style="width:100%;margin-bottom:8px"></audio>`).join('')}</div>`;
-  overlay.onclick = (e) => { if (e.target === overlay || e.target.tagName === 'BUTTON') overlay.remove(); };
+  overlay.onclick = (e) => { if (e.target === overlay || e.target.tagName === 'BUTTON') { document.body.style.overflow = ''; overlay.remove(); } };
+  document.body.style.overflow = 'hidden';
   document.body.appendChild(overlay);
 }
 
@@ -801,9 +809,10 @@ function openTemplatePanel(t, tags, container, childId) {
       <button class="btn-primary checkin-submit" id="tpSave">保存</button>
       ${isEdit ? `<button class="btn-ghost checkin-submit" id="tpDel" style="margin-top:8px;color:var(--no)">删除任务</button>` : ''}
     </div>`;
+  document.body.style.overflow = 'hidden';
   document.body.appendChild(overlay);
   const $ = s => overlay.querySelector(s);
-  const close = () => overlay.remove();
+  const close = () => { document.body.style.overflow = ''; overlay.remove(); };
   overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
   $('#tpClose').onclick = close;
 
@@ -865,13 +874,13 @@ function openTemplatePanel(t, tags, container, childId) {
         await db.addTemplate({ ...patch, plan_id: state.currentPlanId, child_id: childId });
       }
       toast('已保存');
-      overlay.remove();
+      close();
       renderTemplates(container, childId);
     } catch (e) { toast('保存失败：' + e.message); }
   };
   if (isEdit) $('#tpDel').onclick = async () => {
     if (!confirm('删除该任务？')) return;
-    try { await db.deleteTemplate(t.id); toast('已删除'); overlay.remove(); renderTemplates(container, childId); }
+    try { await db.deleteTemplate(t.id); toast('已删除'); close(); renderTemplates(container, childId); }
     catch (e) { toast('删除失败：' + e.message); }
   };
 }

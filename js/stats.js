@@ -291,6 +291,10 @@ function showStreakPanel(streak, detail) {
       <div class="streak-hint">不含当天（当天未结束不统计）。从最近一天往前：</div>
       <div class="streak-list">${rows}</div>
     </div>`;
-  overlay.onclick = (e) => { if (e.target === overlay || e.target.tagName === 'BUTTON') overlay.remove(); };
+  const bodyLock = () => { document.body.style.overflow = 'hidden'; };
+  const bodyUnlock = () => { document.body.style.overflow = ''; };
+  const remove = () => { bodyUnlock(); overlay.remove(); };
+  overlay.onclick = (e) => { if (e.target === overlay || e.target.tagName === 'BUTTON') remove(); };
+  bodyLock();
   document.body.appendChild(overlay);
 }
