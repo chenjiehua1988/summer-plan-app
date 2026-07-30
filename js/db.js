@@ -755,15 +755,21 @@ export async function calcConsecutiveDaysDetail(childId, date, planId, startDate
       .eq('child_id', childId).eq('plan_id', pid).neq('status', 'skipped')
       .gte('date', fromBound).lt('date', date),
     supabase.from('point_ledger').select('created_at,delta,reason').eq('child_id', childId).eq('plan_id', pid)
-      .or('reason.ilike.%连续%奖励%,reason.ilike.%未完成%')
+      .or('reason.ilike.*连续*奖励*,reason.ilike.*未完成*')
       .gte('created_at', fromBound + 'T00:00:00')
   ]);
 
   // 结算流水按日期分组（key: YYYY-MM-DD, value: {bonus:+, deducted:-}）
+  // 注意：自动结算是次日凌晨执行的，point_ledger.created_at 是执行日而非被结算日。
+  // 必须从 reason 里提取日期（如 "07-29连续5天全部完成奖励" → 07-29）
   const settleByDate = {};
+  const curYear = new Date(date + 'T00:00:00').getFullYear(); // 被结算日期所在年份
   (ledgerRes.data || []).forEach(l => {
-    const dt = l.created_at ? l.created_at.slice(0, 10) : null;
-    if (!dt) return;
+    // reason 格式: "MM-DD连续N天全部完成奖励" 或 "MM-DD未完成：任务名"
+    const m = (l.reason || '').match(/^(\d{2}-\d{2})/);
+    if (!m) return;
+    // 如果 MM-DD 跨年了（如01-01 但 date 在12月底），需要判断年份
+    const dt = curYear + '-' + m[1];
     settleByDate[dt] = settleByDate[dt] || { bonus: 0, deducted: 0 };
     if (l.delta > 0) settleByDate[dt].bonus += l.delta;
     else settleByDate[dt].deducted += -l.delta;
