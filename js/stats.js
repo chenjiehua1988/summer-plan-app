@@ -175,13 +175,17 @@ export async function renderStats(view) {
   const streakCard = view.querySelector('#streakCard');
   if (streakCard) {
     let streakDetail = null;
+    let streakLoading = false;
     streakCard.onclick = async () => {
+      if (streakLoading) return; // 防重入：快速双击不创建重叠遮罩
+      streakLoading = true;
       const loadingOverlay = showStreakLoading();
       if (streakDetail === null) {
         try { const r = await db.calcConsecutiveDaysDetail(childId, today, state.currentPlanId, plan?.start_date); streakDetail = r.detail; }
         catch (e) { streakDetail = []; }
       }
       loadingOverlay.remove();
+      streakLoading = false;
       showStreakPanel(streak, streakDetail);
     };
   }
@@ -254,6 +258,7 @@ function showStreakLoading() {
   overlay.className = 'photo-overlay';
   overlay.style.background = 'rgba(0,0,0,.5)';
   overlay.innerHTML = `<div class="streak-panel" style="padding:30px;text-align:center;color:var(--muted,#999)">加载中…</div>`;
+  document.body.style.overflow = 'hidden';
   document.body.appendChild(overlay);
   return overlay;
 }

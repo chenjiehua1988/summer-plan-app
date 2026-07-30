@@ -763,13 +763,15 @@ export async function calcConsecutiveDaysDetail(childId, date, planId, startDate
   // 注意：自动结算是次日凌晨执行的，point_ledger.created_at 是执行日而非被结算日。
   // 必须从 reason 里提取日期（如 "07-29连续5天全部完成奖励" → 07-29）
   const settleByDate = {};
-  const curYear = new Date(date + 'T00:00:00').getFullYear(); // 被结算日期所在年份
+  const refD = new Date(date + 'T00:00:00'); // 用于判断跨年
   (ledgerRes.data || []).forEach(l => {
     // reason 格式: "MM-DD连续N天全部完成奖励" 或 "MM-DD未完成：任务名"
     const m = (l.reason || '').match(/^(\d{2}-\d{2})/);
     if (!m) return;
-    // 如果 MM-DD 跨年了（如01-01 但 date 在12月底），需要判断年份
-    const dt = curYear + '-' + m[1];
+    // 年份推断：若 MM-DD 月份大于 refD 月份则属于上一年（如 refD=01-01 但 reason=12-31 属于去年）
+    const mon = +m[1].slice(0, 2);
+    const yr = mon > refD.getMonth() + 1 ? refD.getFullYear() - 1 : refD.getFullYear();
+    const dt = yr + '-' + m[1];
     settleByDate[dt] = settleByDate[dt] || { bonus: 0, deducted: 0 };
     if (l.delta > 0) settleByDate[dt].bonus += l.delta;
     else settleByDate[dt].deducted += -l.delta;
@@ -824,7 +826,6 @@ export async function settleDay(childId, date) {
     const onceIds = new Set((tmpls || []).filter(t => t.recurrence === 'once').map(t => t.id));
     tasks = tasks.filter(r => !onceIds.has(r.task_id));
   }
-  if (!tasks.length) return { err: '当天没有任务' };
   if (!tasks.length) return { err: '当天没有任务' };
 
   // 未verified的扣分
