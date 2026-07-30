@@ -268,11 +268,13 @@ function showStreakPanel(streak, detail) {
     onceOnly: '📌 仅一次性任务'
   };
   const rows = (detail && detail.length) ? detail.map(it => {
+    const settleHtml = it.settle && (it.settle.bonus > 0 || it.settle.deducted > 0)
+      ? `<span class="streak-settle">${it.settle.bonus > 0 ? `🎁+${it.settle.bonus}` : ''}${it.settle.bonus > 0 && it.settle.deducted > 0 ? ' ' : ''}${it.settle.deducted > 0 ? `扣${it.settle.deducted}分` : ''}</span>` : '';
     const extra = it.type === 'break' && it.unfinished?.length
       ? `<div class="streak-break">未完成：${it.unfinished.map(u => `${u.title}（${u.status}）`).join('、')}</div>` : '';
     return `<div class="streak-row streak-${it.type}">
       <span class="streak-date">${it.date.slice(5)}</span>
-      <span class="streak-status">${statusText[it.type] || it.type}</span>
+      <span class="streak-status">${statusText[it.type] || it.type}${settleHtml}</span>
       ${extra}
     </div>`;
   }).join('') : '<div class="empty">暂无历史数据。</div>';

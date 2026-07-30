@@ -748,13 +748,26 @@ export async function calcConsecutiveDaysDetail(childId, date, planId, startDate
 
   const fromBound = startDate || '2000-01-01';
 
-  const [tmplsRes, offsRes, recsRes] = await Promise.all([
+  const [tmplsRes, offsRes, recsRes, ledgerRes] = await Promise.all([
     supabase.from('task_templates').select('id,recurrence').eq('plan_id', pid),
     supabase.from('day_off').select('date').eq('plan_id', pid).eq('child_id', childId),
     supabase.from('daily_records').select('date,status,task_id,title')
       .eq('child_id', childId).eq('plan_id', pid).neq('status', 'skipped')
-      .gte('date', fromBound).lt('date', date)
+      .gte('date', fromBound).lt('date', date),
+    supabase.from('point_ledger').select('created_at,delta,reason').eq('child_id', childId).eq('plan_id', pid)
+      .or('reason.ilike.%连续%奖励%,reason.ilike.%未完成%')
+      .gte('created_at', fromBound + 'T00:00:00')
   ]);
+
+  // 结算流水按日期分组（key: YYYY-MM-DD, value: {bonus:+, deducted:-}）
+  const settleByDate = {};
+  (ledgerRes.data || []).forEach(l => {
+    const dt = l.created_at ? l.created_at.slice(0, 10) : null;
+    if (!dt) return;
+    settleByDate[dt] = settleByDate[dt] || { bonus: 0, deducted: 0 };
+    if (l.delta > 0) settleByDate[dt].bonus += l.delta;
+    else settleByDate[dt].deducted += -l.delta;
+  });
 
   const onceIds = new Set((tmplsRes.data || []).filter(t => t.recurrence === 'once').map(t => t.id));
   const dayOffDates = new Set((offsRes.data || []).map(o => o.date));
@@ -781,10 +794,10 @@ export async function calcConsecutiveDaysDetail(childId, date, planId, startDate
     const regular = prev.filter(r => !onceIds.has(r.task_id));
     const regUnfinished = regular.filter(r => r.status !== 'verified');
     if (regUnfinished.length) {
-      detail.push({ date: ds, type: 'break', unfinished: regUnfinished.map(r => ({ title: r.title, status: r.status })) });
+      detail.push({ date: ds, type: 'break', unfinished: regUnfinished.map(r => ({ title: r.title, status: r.status })), settle: settleByDate[ds] });
       break;
     }
-    detail.push({ date: ds, type: regular.length ? 'ok' : 'none' });
+    detail.push({ date: ds, type: regular.length ? 'ok' : 'none', settle: settleByDate[ds] });
     streak++;
   }
   return { streak, detail };
@@ -835,7 +848,9 @@ export async function settleDay(childId, date) {
 
   if (todayAllDone) {
     const { data: planRow } = await supabase.from('plans').select('start_date').eq('id', state.currentPlanId).maybeSingle();
-    streak = await calcConsecutiveDays(childId, date, state.currentPlanId, planRow?.start_date);
+    const priorStreak = await calcConsecutiveDays(childId, date, state.currentPlanId, planRow?.start_date);
+    // calcConsecutiveDays 不含 date 当天；但 date 这天已确认全部完成(todayAllDone)，要算进连续天数
+    streak = priorStreak + 1;
 
     // 取该孩子最近一次的已奖励周期数（防重复发奖）
     let lastBonus = 0;

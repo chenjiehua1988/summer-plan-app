@@ -372,6 +372,8 @@ textarea.checkin-note, textarea.vnote { width: 100%; padding: 9px; border: 1px s
 .streak-ok .streak-status { color: var(--ok,#27ae60); }
 .streak-break .streak-status { color: var(--no,#e74c3c); }
 .streak-dayoff .streak-status, .streak-none .streak-status { color: var(--muted,#999); }
+.streak-settle { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 12px; font-weight: 600;
+  background: #fff9e0; color: #b06a00; margin-left: 6px; }
 
 /* 单张全屏放大 */
 .photo-fullscreen { position: fixed; inset: 0; background: #000; z-index: 320;
