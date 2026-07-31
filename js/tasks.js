@@ -344,7 +344,7 @@ function openInstructionPanel(id, r) {
   // 选音频
   $('#instAudioFile').onclick = () => {
     const input = document.createElement('input');
-    input.type = 'file'; input.accept = 'audio/*';
+    input.type = 'file'; input.accept = 'audio/*,.m4a,.aac,.m4r,.caf';
     input.onchange = async () => {
       for (const f of input.files) {
         const sec = await audioDuration(f);
@@ -529,7 +529,7 @@ function openCheckinPanel(id, r, records, el) {
   // 选音频文件
   $('#ckAudioFile').onclick = () => {
     const input = document.createElement('input');
-    input.type = 'file'; input.accept = 'audio/*';
+    input.type = 'file'; input.accept = 'audio/*,.m4a,.aac,.m4r,.caf';
     input.onchange = async () => {
       for (const f of input.files) {
         const sec = await audioDuration(f);
