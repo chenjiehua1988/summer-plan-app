@@ -235,6 +235,8 @@ export async function ensureDailyRecords(childId, date, planId) {
   if (error) throw error;
   // 生成：必须有当前周期
   if (!pid) return existing || [];
+  // 顺手清理前一天的说明附件（说明附件是当天任务要求的载体，第二天起就没用了）
+  try { cleanExpiredInstructionAttachments(childId, pid, date); } catch (e) { /* 静默 */ }
   const templates = await fetchTemplates(pid, childId);
   const dow = new Date(date + 'T00:00:00').getDay();
   let active = templates.filter(t => t.active && inSchedule(t, date, dow));
@@ -667,6 +669,53 @@ export async function uploadInstructionAudio(recordId, blob, ext) {
   const { data: pub } = supabase.storage.from('verify-photos').getPublicUrl(path);
   return pub.publicUrl;
 }
+
+// ---------- 说明附件清理 ----------
+// 说明附件是"当天任务要求"的载体，第二天起就没用了。
+// 清理某孩子某天之前（不含当天）的说明附件：删storage文件 + 清空字段（保留instruction文字）
+function urlToStoragePath(url) {
+  if (!url) return null;
+  const m = url.match(/\/storage\/v1\/object\/public\/verify-photos\/(.+)$/);
+  return m ? m[1] : null;
+}
+export async function cleanExpiredInstructionAttachments(childId, planId, date) {
+  const pid = planId || state.currentPlanId;
+  if (!pid) return { deleted: 0 };
+  // 查date之前的、有说明附件的记录
+  const { data: recs, error } = await supabase.from('daily_records')
+    .select('id,instruction_photos,instruction_audios')
+    .eq('child_id', childId).eq('plan_id', pid).lt('date', date)
+    .or('instruction_photos.neq.{},instruction_audios.neq.{}');
+  if (error || !recs || !recs.length) return { deleted: 0 };
+
+  // 收集所有要删的文件URL
+  const urls = [];
+  const ids = [];
+  recs.forEach(r => {
+    let has = false;
+    (r.instruction_photos || []).forEach(u => { if (u) { urls.push(u); has = true; } });
+    (r.instruction_audios || []).forEach(u => { if (u) { urls.push(u); has = true; } });
+    if (has) ids.push(r.id);
+  });
+  if (!urls.length) return { deleted: 0 };
+
+  // 删storage文件
+  const paths = urls.map(urlToStoragePath).filter(Boolean);
+  let deleted = 0;
+  for (let i = 0; i < paths.length; i += 500) {
+    const batch = paths.slice(i, i + 500);
+    const { error: re } = await supabase.storage.from('verify-photos').remove(batch);
+    if (!re) deleted += batch.length;
+    else console.warn('clean instr files failed', re.message);
+  }
+  // 清空daily_records的说明附件字段（保留instruction文字）
+  const { error: ue } = await supabase.from('daily_records')
+    .update({ instruction_photos: [], instruction_audios: [], updated_at: new Date().toISOString() })
+    .in('id', ids);
+  if (ue) console.warn('clear instr fields failed', ue.message);
+  return { deleted };
+}
+
 // 给记录追加音频路径
 export async function appendAudios(recordId, newUrls) {
   const { data: rec, error: e1 } = await supabase
