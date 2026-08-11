@@ -234,7 +234,7 @@ function taskRow(r) {
       <button class="check ${done ? 'checked' : ''} ${skipped ? 'skip' : ''}" aria-label="完成">${done ? '✓' : skipped ? '—' : ''}</button>
       <div class="task-body">
         <div class="task-title">${r.title}</div>
-        ${r.instruction ? `<div class="task-instruction">❗ ${renderInstructionText(r.instruction)}${isParent ? ` <b class="edit-instr" data-instr="${r.id}">改</b>` : ''}</div>` : (isParent ? `<div class="task-instruction"><b class="edit-instr" data-instr="${r.id}">+加说明</b></div>` : '')}
+        ${r.instruction ? `<div class="task-instruction">❗ ${renderInstructionText(r.instruction, r.tags)}${isParent ? ` <b class="edit-instr" data-instr="${r.id}">改</b>` : ''}</div>` : (isParent ? `<div class="task-instruction"><b class="edit-instr" data-instr="${r.id}">+加说明</b></div>` : '')}
         ${(r.instruction_photos||[]).length || (r.instruction_audios||[]).length ? `
           <div class="task-meta">
             ${(r.instruction_photos||[]).length ? `<span class="task-photos link" data-viewinstrphoto="1">📷说明${r.instruction_photos.length}</span>` : ''}
@@ -697,10 +697,11 @@ function audioDuration(file) {
 }
 function fmtSec(s) { const m = String(Math.floor(s/60)).padStart(2,'0'); const ss = String(s%60).padStart(2,'0'); return m+':'+ss; }
 
-// 把说明文字里的 URL 渲染成可交互元素：
-// 音频文件直链 → <audio controls>；网页链接 → 内嵌播放按钮（点击在 app 内 iframe 弹窗打开）
-function renderInstructionText(text) {
+// 把说明文字里的 URL 渲染成可交互元素。
+// 只有任务标签包含"语音"或"音频"字样时才把 URL 渲染为播放按钮，否则纯文本显示。
+function renderInstructionText(text, tags) {
   if (!text) return '';
+  const hasAudioTag = (tags || []).some(t => /语音|音频|听力/.test(t));
   const urlRe = /(https?:\/\/[^\s]+)/g;
   const audioExts = /\.(mp3|m4a|aac|ogg|wav|webm|opus|caf)(\?[^\s]*)?$/i;
   return text.split(urlRe).map(p => {
@@ -708,7 +709,10 @@ function renderInstructionText(text) {
       if (audioExts.test(p)) {
         return `<audio controls src="${p}" style="width:100%;margin:4px 0;display:block"></audio>`;
       }
-      return `<button class="btn-primary btn-sm instr-url-btn" data-url="${p}" style="margin:4px 0;width:100%">▶ 点击播放听力</button>`;
+      if (hasAudioTag) {
+        return `<button class="btn-primary btn-sm instr-url-btn" data-url="${p}" style="margin:4px 0;width:100%">▶ 点击播放听力</button>`;
+      }
+      return `<a href="${p}" target="_blank" rel="noopener" style="word-break:break-all;color:var(--primary)">${p}</a>`;
     }
     return p.replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }).join('');
