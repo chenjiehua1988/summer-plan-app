@@ -230,7 +230,7 @@ function taskRow(r) {
       <button class="check ${done ? 'checked' : ''} ${skipped ? 'skip' : ''}" aria-label="完成">${done ? '✓' : skipped ? '—' : ''}</button>
       <div class="task-body">
         <div class="task-title">${r.title}</div>
-        ${r.instruction ? `<div class="task-instruction">❗ ${r.instruction}${isParent ? ` <b class="edit-instr" data-instr="${r.id}">改</b>` : ''}</div>` : (isParent ? `<div class="task-instruction"><b class="edit-instr" data-instr="${r.id}">+加说明</b></div>` : '')}
+        ${r.instruction ? `<div class="task-instruction">❗ ${renderInstructionText(r.instruction)}${isParent ? ` <b class="edit-instr" data-instr="${r.id}">改</b>` : ''}</div>` : (isParent ? `<div class="task-instruction"><b class="edit-instr" data-instr="${r.id}">+加说明</b></div>` : '')}
         ${(r.instruction_photos||[]).length || (r.instruction_audios||[]).length ? `
           <div class="task-meta">
             ${(r.instruction_photos||[]).length ? `<span class="task-photos link" data-viewinstrphoto="1">📷说明${r.instruction_photos.length}</span>` : ''}
@@ -320,10 +320,10 @@ function openInstructionPanel(id, r) {
       e.stopPropagation();
       viewFullPhoto(st.existingPhotos, +img.dataset.view);
     });
-    overlay.querySelectorAll('[data-rm-ephoto]').forEach(b => b.onclick = () => { st.existingPhotos.splice(+b.dataset.rmEphoto, 1); renderPicked(); });
-    overlay.querySelectorAll('[data-rm-eaudio]').forEach(b => b.onclick = () => { st.existingAudios.splice(+b.dataset.rmEaudio, 1); renderPicked(); });
-    overlay.querySelectorAll('[data-rm-photo]').forEach(b => b.onclick = () => { st.photoFiles.splice(+b.dataset.rmPhoto, 1); renderPicked(); });
-    overlay.querySelectorAll('[data-rm-audio]').forEach(b => b.onclick = () => { st.audioBlobs.splice(+b.dataset.rmAudio, 1); renderPicked(); });
+    overlay.querySelectorAll('[data-rm-ephoto]').forEach(b => b.onclick = () => { if (!confirm('确认删除这张照片？')) return; st.existingPhotos.splice(+b.dataset.rmEphoto, 1); renderPicked(); });
+    overlay.querySelectorAll('[data-rm-eaudio]').forEach(b => b.onclick = () => { if (!confirm('确认删除这段录音？')) return; st.existingAudios.splice(+b.dataset.rmEaudio, 1); renderPicked(); });
+    overlay.querySelectorAll('[data-rm-photo]').forEach(b => b.onclick = () => { if (!confirm('确认删除这张照片？')) return; st.photoFiles.splice(+b.dataset.rmPhoto, 1); renderPicked(); });
+    overlay.querySelectorAll('[data-rm-audio]').forEach(b => b.onclick = () => { if (!confirm('确认删除这段录音？')) return; st.audioBlobs.splice(+b.dataset.rmAudio, 1); renderPicked(); });
   }
   renderPicked();
 
@@ -505,10 +505,10 @@ function openCheckinPanel(id, r, records, el) {
       e.stopPropagation();
       viewFullPhoto(st.existingPhotos, +img.dataset.view);
     });
-    overlay.querySelectorAll('[data-rm-ephoto]').forEach(b => b.onclick = () => { st.existingPhotos.splice(+b.dataset.rmEphoto,1); renderPicked(); });
-    overlay.querySelectorAll('[data-rm-eaudio]').forEach(b => b.onclick = () => { st.existingAudios.splice(+b.dataset.rmEaudio,1); renderPicked(); });
-    overlay.querySelectorAll('[data-rm-photo]').forEach(b => b.onclick = () => { st.photoFiles.splice(+b.dataset.rmPhoto,1); renderPicked(); });
-    overlay.querySelectorAll('[data-rm-audio]').forEach(b => b.onclick = () => { st.audioBlobs.splice(+b.dataset.rmAudio,1); renderPicked(); });
+    overlay.querySelectorAll('[data-rm-ephoto]').forEach(b => b.onclick = () => { if (!confirm('确认删除这张照片？')) return; st.existingPhotos.splice(+b.dataset.rmEphoto,1); renderPicked(); });
+    overlay.querySelectorAll('[data-rm-eaudio]').forEach(b => b.onclick = () => { if (!confirm('确认删除这段录音？')) return; st.existingAudios.splice(+b.dataset.rmEaudio,1); renderPicked(); });
+    overlay.querySelectorAll('[data-rm-photo]').forEach(b => b.onclick = () => { if (!confirm('确认删除这张照片？')) return; st.photoFiles.splice(+b.dataset.rmPhoto,1); renderPicked(); });
+    overlay.querySelectorAll('[data-rm-audio]').forEach(b => b.onclick = () => { if (!confirm('确认删除这段录音？')) return; st.audioBlobs.splice(+b.dataset.rmAudio,1); renderPicked(); });
   };
   renderPicked(); // 初始显示已有的
 
@@ -692,6 +692,23 @@ function audioDuration(file) {
   });
 }
 function fmtSec(s) { const m = String(Math.floor(s/60)).padStart(2,'0'); const ss = String(s%60).padStart(2,'0'); return m+':'+ss; }
+
+// 把说明文字里的 URL 渲染成可交互元素：
+// 音频链接 → <audio controls>（直接播放，不跳浏览器）；其他 URL → <a> 链接
+function renderInstructionText(text) {
+  if (!text) return '';
+  const urlRe = /(https?:\/\/[^\s]+)/g;
+  const audioExts = /\.(mp3|m4a|aac|ogg|wav|webm|opus|caf)(\?[^\s]*)?$/i;
+  return text.split(urlRe).map(p => {
+    if (/^https?:\/\//.test(p)) {
+      if (audioExts.test(p)) {
+        return `<audio controls src="${p}" style="width:100%;margin:4px 0;display:block"></audio>`;
+      }
+      return `<a href="${p}" target="_blank" rel="noopener" style="word-break:break-all;color:var(--primary)">${p}</a>`;
+    }
+    return p.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }).join('');
+}
 
 // 照片/录音预览
 function viewPhotos(photos) {
