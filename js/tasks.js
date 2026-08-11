@@ -136,6 +136,10 @@ export async function renderToday(view) {
         else openCheckinPanel(id, r, records, el);
       });
     });
+    // 说明里的网页听力链接：在 app 内 iframe 弹窗播放
+    el.querySelectorAll('.instr-url-btn').forEach(b => {
+      b.addEventListener('click', (e) => { e.stopPropagation(); openUrlInApp(b.dataset.url); });
+    });
     // 父母改当天说明（打开面板：文字+录音+图片）
     el.querySelector('.edit-instr')?.addEventListener('click', async (e) => {
       e.stopPropagation();
@@ -694,16 +698,36 @@ function audioDuration(file) {
 function fmtSec(s) { const m = String(Math.floor(s/60)).padStart(2,'0'); const ss = String(s%60).padStart(2,'0'); return m+':'+ss; }
 
 // 把说明文字里的 URL 渲染成可交互元素：
-// 所有 URL 一律渲染成 <audio controls>（说明里放的都是听力链接，直接在 app 内播放）
+// 音频文件直链 → <audio controls>；网页链接 → 内嵌播放按钮（点击在 app 内 iframe 弹窗打开）
 function renderInstructionText(text) {
   if (!text) return '';
   const urlRe = /(https?:\/\/[^\s]+)/g;
+  const audioExts = /\.(mp3|m4a|aac|ogg|wav|webm|opus|caf)(\?[^\s]*)?$/i;
   return text.split(urlRe).map(p => {
     if (/^https?:\/\//.test(p)) {
-      return `<audio controls src="${p}" style="width:100%;margin:4px 0;display:block"></audio>`;
+      if (audioExts.test(p)) {
+        return `<audio controls src="${p}" style="width:100%;margin:4px 0;display:block"></audio>`;
+      }
+      return `<button class="btn-primary btn-sm instr-url-btn" data-url="${p}" style="margin:4px 0;width:100%">▶ 点击播放听力</button>`;
     }
     return p.replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }).join('');
+}
+
+// 在 app 内用 iframe 弹窗打开听力网页，不跳出浏览器
+function openUrlInApp(url) {
+  const overlay = document.createElement('div');
+  overlay.className = 'photo-overlay';
+  overlay.style.cssText = 'display:flex;flex-direction:column;background:rgba(0,0,0,.9)';
+  overlay.innerHTML = `
+    <div class="photo-bar">
+      <span>听力播放</span>
+      <button class="btn-ghost btn-sm" id="iframeClose">关闭</button>
+    </div>
+    <iframe src="${url}" style="flex:1;border:none;border-radius:8px;background:#fff" allowfullscreen allow="autoplay"></iframe>`;
+  document.body.style.overflow = 'hidden';
+  document.body.appendChild(overlay);
+  overlay.querySelector('#iframeClose').onclick = () => { document.body.style.overflow = ''; overlay.remove(); };
 }
 
 // 照片/录音预览
