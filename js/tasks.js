@@ -694,17 +694,13 @@ function audioDuration(file) {
 function fmtSec(s) { const m = String(Math.floor(s/60)).padStart(2,'0'); const ss = String(s%60).padStart(2,'0'); return m+':'+ss; }
 
 // 把说明文字里的 URL 渲染成可交互元素：
-// 音频链接 → <audio controls>（直接播放，不跳浏览器）；其他 URL → <a> 链接
+// 所有 URL 一律渲染成 <audio controls>（说明里放的都是听力链接，直接在 app 内播放）
 function renderInstructionText(text) {
   if (!text) return '';
   const urlRe = /(https?:\/\/[^\s]+)/g;
-  const audioExts = /\.(mp3|m4a|aac|ogg|wav|webm|opus|caf)(\?[^\s]*)?$/i;
   return text.split(urlRe).map(p => {
     if (/^https?:\/\//.test(p)) {
-      if (audioExts.test(p)) {
-        return `<audio controls src="${p}" style="width:100%;margin:4px 0;display:block"></audio>`;
-      }
-      return `<a href="${p}" target="_blank" rel="noopener" style="word-break:break-all;color:var(--primary)">${p}</a>`;
+      return `<audio controls src="${p}" style="width:100%;margin:4px 0;display:block"></audio>`;
     }
     return p.replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }).join('');
