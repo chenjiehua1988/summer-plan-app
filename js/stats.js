@@ -219,7 +219,7 @@ export async function renderStats(view) {
         ${c.title ? `<div class="checkin-note" style="font-weight:600">${c.title}</div>` : ''}
         ${c.note ? `<div class="checkin-note">${c.note}</div>` : ''}
         ${(c.photos||[]).length ? `<div class="checkin-media">${(c.photos||[]).map((u,i)=>`<img src="${u}" data-i="${i}" data-photos='${JSON.stringify(c.photos)}'>`).join('')}</div>` : ''}
-        ${(c.audios||[]).length ? `<div>${(c.audios||[]).map(u=>`<audio controls src="${u}" style="width:100%;margin:4px 0"></audio>`).join('')}</div>` : ''}
+        ${(c.audios||[]).length ? `<div>${(c.audios||[]).map(u=>`<audio controls preload="none" src="${u}" style="width:100%;margin:4px 0"></audio>`).join('')}</div>` : ''}
       </div>`).join('');
     area.querySelectorAll('.checkin-media img').forEach(img => img.onclick = () => {
       const photos = JSON.parse(img.dataset.photos);

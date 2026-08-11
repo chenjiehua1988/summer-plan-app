@@ -573,6 +573,63 @@ export async function markDayOffRange(planId, childId, fromDate, toDate, reason)
   return dates.length;
 }
 
+// ---------- 音频压缩（>2MB 时压缩为 MP3 64kbps 单声道 32kHz） ----------
+let _lamejsLoaded = false;
+async function loadLamejs() {
+  if (_lamejsLoaded) return;
+  await new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js';
+    s.onload = () => { _lamejsLoaded = true; resolve(); };
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+
+export async function compressAudio(file) {
+  const THRESHOLD = 2 * 1024 * 1024; // 2MB 以下不压缩
+  if (file.size <= THRESHOLD) return { blob: file, ext: (file.name.split('.').pop() || 'mp4').toLowerCase() };
+  try {
+    await loadLamejs();
+    const arrayBuf = await file.arrayBuffer();
+    const audioCtx = new OfflineAudioContext(1, 1, 44100); // 只用来 decodeAudioData
+    const decoded = await new Promise((res, rej) => {
+      audioCtx.decodeAudioData(arrayBuf.slice(0), res, rej);
+    });
+    // 降采样到单声道 32kHz
+    const TARGET_SR = 32000;
+    const offCtx = new OfflineAudioContext(1, Math.ceil(decoded.duration * TARGET_SR), TARGET_SR);
+    const src = offCtx.createBufferSource();
+    src.buffer = decoded;
+    src.connect(offCtx.destination);
+    src.start(0);
+    const rendered = await offCtx.startRendering();
+    const samples = rendered.getChannelData(0);
+    // lamejs 需要 Int16
+    const int16 = new Int16Array(samples.length);
+    for (let i = 0; i < samples.length; i++) {
+      int16[i] = Math.max(-32768, Math.min(32767, Math.round(samples[i] * 32767)));
+    }
+    // MP3 编码 64kbps
+    const mp3enc = new lamejs.Mp3Encoder(1, TARGET_SR, 64);
+    const BLOCK = 1152;
+    const mp3Chunks = [];
+    for (let i = 0; i < int16.length; i += BLOCK) {
+      const chunk = int16.subarray(i, i + BLOCK);
+      const encoded = mp3enc.encodeBuffer(chunk);
+      if (encoded.length > 0) mp3Chunks.push(new Uint8Array(encoded));
+    }
+    const tail = mp3enc.flush();
+    if (tail.length > 0) mp3Chunks.push(new Uint8Array(tail));
+    const blob = new Blob(mp3Chunks, { type: 'audio/mp3' });
+    console.log(`音频压缩 ${(file.size/1024/1024).toFixed(1)}MB → ${(blob.size/1024/1024).toFixed(1)}MB`);
+    return { blob, ext: 'mp3' };
+  } catch (e) {
+    console.warn('音频压缩失败，使用原文件', e.message);
+    return { blob: file, ext: (file.name.split('.').pop() || 'mp4').toLowerCase() };
+  }
+}
+
 // ---------- 照片上传（前端压缩 + Storage） ----------
 // 压缩图片：长边 1280，JPEG 0.7
 async function compressImage(file, maxSide = 1280, quality = 0.7) {

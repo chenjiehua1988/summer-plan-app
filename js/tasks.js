@@ -4,6 +4,7 @@
 import { supabase, state, todayStr, toast, actorName, segHtml, bindSeg, hm, mdhm } from './supabase.js';
 import * as db from './db.js';
 import { viewFullPhoto } from './photo-viewer.js';
+import { compressAudio } from './db.js';
 
 // 今日打卡视图：渲染当天 daily_records，按标签分组；支持假期标记与打卡拍照
 export async function renderToday(view) {
@@ -178,7 +179,7 @@ async function openHistoryPanel(r) {
       </div>
       ${c.note ? `<div class="checkin-note">${c.note}</div>` : ''}
       ${(c.photos||[]).length ? `<div class="checkin-media">${(c.photos||[]).map(u=>`<img src="${u}" data-full="${u}">`).join('')}</div>` : ''}
-      ${(c.audios||[]).length ? `<div>${(c.audios||[]).map(u=>`<audio controls src="${u}" style="width:100%;margin:4px 0"></audio>`).join('')}</div>` : ''}
+      ${(c.audios||[]).length ? `<div>${(c.audios||[]).map(u=>`<audio controls preload="none" src="${u}" style="width:100%;margin:4px 0"></audio>`).join('')}</div>` : ''}
     </div>`).join('');
   overlay.querySelector('.loading').outerHTML = `<div class="checkin-list">${html}</div>`;
   overlay.querySelectorAll('.checkin-media img').forEach(img => img.onclick = () => viewPhotos([img.dataset.full]));
@@ -351,8 +352,10 @@ function openInstructionPanel(id, r) {
     input.type = 'file'; input.accept = 'audio/*,.m4a,.aac,.m4r,.caf';
     input.onchange = async () => {
       for (const f of input.files) {
-        const sec = await audioDuration(f);
-        st.audioBlobs.push({ blob: f, ext: (f.name.split('.').pop() || 'mp4').toLowerCase(), sec });
+        toast('处理音频中…');
+        const { blob, ext } = await compressAudio(f);
+        const sec = await audioDuration(blob);
+        st.audioBlobs.push({ blob, ext, sec });
       }
       renderPicked();
     };
@@ -536,8 +539,10 @@ function openCheckinPanel(id, r, records, el) {
     input.type = 'file'; input.accept = 'audio/*,.m4a,.aac,.m4r,.caf';
     input.onchange = async () => {
       for (const f of input.files) {
-        const sec = await audioDuration(f);
-        st.audioBlobs.push({ blob: f, ext: (f.name.split('.').pop() || 'mp4').toLowerCase(), sec });
+        toast('处理音频中…');
+        const { blob, ext } = await compressAudio(f);
+        const sec = await audioDuration(blob);
+        st.audioBlobs.push({ blob, ext, sec });
       }
       renderPicked();
     };
@@ -707,7 +712,7 @@ function renderInstructionText(text, tags) {
   return text.split(urlRe).map(p => {
     if (/^https?:\/\//.test(p)) {
       if (audioExts.test(p)) {
-        return `<audio controls src="${p}" style="width:100%;margin:4px 0;display:block"></audio>`;
+        return `<audio controls preload="none" src="${p}" style="width:100%;margin:4px 0;display:block"></audio>`;
       }
       if (hasAudioTag) {
         return `<button class="btn-primary btn-sm instr-url-btn" data-url="${p}" style="margin:4px 0;width:100%">▶ 点击播放听力</button>`;
@@ -755,7 +760,7 @@ function viewAudios(audios) {
   overlay.className = 'photo-overlay';
   overlay.innerHTML = `
     <div class="photo-bar"><span>录音 ${audios.length} 段</span><button class="btn-ghost btn-sm">关闭</button></div>
-    <div class="audio-list">${audios.map(u => `<audio controls src="${u}" style="width:100%;margin-bottom:8px"></audio>`).join('')}</div>`;
+    <div class="audio-list">${audios.map(u => `<audio controls preload="none" src="${u}" style="width:100%;margin-bottom:8px"></audio>`).join('')}</div>`;
   overlay.onclick = (e) => { if (e.target === overlay || e.target.tagName === 'BUTTON') { document.body.style.overflow = ''; overlay.remove(); } };
   document.body.style.overflow = 'hidden';
   document.body.appendChild(overlay);
