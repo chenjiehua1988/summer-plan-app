@@ -919,11 +919,14 @@ export async function calcConsecutiveDaysDetail(childId, date, planId, startDate
 
 // ---------- 奖惩结算 ----------
 // 结算当天：未verified任务扣分，全完成计连续天数+奖励
-export async function settleDay(childId, date) {
+export async function settleDay(childId, date, planId) {
   const fam = state.family;
-  // 查当天所有非skipped记录（排除一次性任务，不参与结算扣分）
-  const { data: recs } = await supabase.from('daily_records').select('*')
+  const pid = planId || state.currentPlanId;
+  // 查当天指定周期的非skipped记录
+  let q = supabase.from('daily_records').select('*')
     .eq('child_id', childId).eq('date', date).neq('status', 'skipped');
+  if (pid) q = q.eq('plan_id', pid);
+  const { data: recs } = await q;
   // 过滤掉一次性任务（通过 task_templates 查 recurrence）
   let tasks = recs || [];
   if (tasks.length) {
@@ -940,19 +943,13 @@ export async function settleDay(childId, date) {
   const dateShort = date.slice(5); // MM-DD
   for (const r of unfinished) {
     await supabase.from('point_ledger').insert({
-      family_id: fam.id, child_id: childId, plan_id: state.currentPlanId || null,
+      family_id: fam.id, child_id: childId, plan_id: pid || null,
       delta: -r.points,
       reason: `${dateShort}未完成：${r.title}`, created_by: actorName()
     });
     deducted += r.points;
   }
 
-  // ---------- 连续打卡天数（不算当天，从昨天起往前数；统一口径见 calcConsecutiveDays）----------
-  // 规则：
-  //   - 当天未完成（常规任务）→ 不影响前面已数出的 streak，保留；但当天不参与结算奖励
-  //   - 前一天是假期 → 跳过；前一天未完成全是 once → 例外跳过；有常规未完成 → 中断
-  //   - 只在当前学习周期内数；跨周期 break
-  //   - 奖励按周期防重复：floor(streak/streakDays) > last_bonus_streak 才发
   const streakDays = fam.streak_days || 5;
   const streakBonus = fam.streak_bonus || 50;
   const todayAllDone = !unfinished.length;
@@ -960,22 +957,19 @@ export async function settleDay(childId, date) {
   let bonus = 0;
 
   if (todayAllDone) {
-    const { data: planRow } = await supabase.from('plans').select('start_date').eq('id', state.currentPlanId).maybeSingle();
-    const priorStreak = await calcConsecutiveDays(childId, date, state.currentPlanId, planRow?.start_date);
-    // calcConsecutiveDays 不含 date 当天；但 date 这天已确认全部完成(todayAllDone)，要算进连续天数
+    const { data: planRow } = await supabase.from('plans').select('start_date').eq('id', pid).maybeSingle();
+    const priorStreak = await calcConsecutiveDays(childId, date, pid, planRow?.start_date);
     streak = priorStreak + 1;
 
-    // 取该孩子最近一次的已奖励周期数（防重复发奖）
     let lastBonus = 0;
     const { data: kidRow } = await supabase.from('children').select('last_bonus_streak')
       .eq('id', childId).maybeSingle();
     lastBonus = kidRow?.last_bonus_streak || 0;
 
-    // 按周期防重复奖励：已连续满多少个 streakDays 周期，超过上次已发的就补发
     const bonusRound = Math.floor(streak / streakDays);
     if (bonusRound > lastBonus) {
       await supabase.from('point_ledger').insert({
-        family_id: fam.id, child_id: childId, plan_id: state.currentPlanId || null,
+        family_id: fam.id, child_id: childId, plan_id: pid || null,
         delta: streakBonus,
         reason: `${dateShort}连续${streakDays}天全部完成奖励`, created_by: '系统'
       });

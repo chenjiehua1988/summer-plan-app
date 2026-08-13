@@ -84,21 +84,27 @@ async function autoSettleYesterday() {
     // 重新查 children 获取 last_settle_date（state.children 可能没这个字段）
     const { data: kids } = await supabase.from('children').select('id,name,last_settle_date').eq('family_id', fam.id);
     if (!kids || !kids.length) return;
+    // 只取 active 周期参与结算
+    const activePlans = state.plans.filter(p => p.status === 'active');
+    if (!activePlans.length) return;
     let msg = '昨天结算：';
     let hasResult = false;
     for (const child of kids) {
       // 该孩子已结算过昨天则跳过
       if (child.last_settle_date && child.last_settle_date >= yStr) continue;
-      try {
-        const r = await db.settleDay(child.id, yStr);
-        if (r.err) continue;
-        hasResult = true;
-        msg += `${child.name}：`;
-        if (r.deducted > 0) msg += `扣${r.deducted}分（${r.unfinished}个未完成）`;
-        else msg += `全部完成`;
-        if (r.bonus > 0) msg += ` 连续${r.streak}天奖励${r.bonus}分🎉`;
-        msg += '；';
-      } catch (e) { console.warn('settle failed for', child.name, e.message); }
+      for (const plan of activePlans) {
+        try {
+          const r = await db.settleDay(child.id, yStr, plan.id);
+          if (r.err) continue;
+          hasResult = true;
+          msg += `${child.name}：`;
+          if (r.deducted > 0) msg += `扣${r.deducted}分（${r.unfinished}个未完成）`;
+          else msg += `全部完成`;
+          if (r.bonus > 0) msg += ` 连续${r.streak}天奖励${r.bonus}分🎉`;
+          msg += '；';
+        } catch (e) { console.warn('settle failed for', child.name, plan.name, e.message); }
+      }
+      // 所有周期结算完后才记录结算日期（由 settleDay 内部写，取最后一次）
     }
     if (hasResult) { toast(msg, 6000); if (window.refreshPointBadge) window.refreshPointBadge(); }
   } catch (e) { console.warn('autoSettle failed', e.message); }
@@ -288,15 +294,19 @@ function switchTab(tab) {
   refreshCurrent();
 }
 
+let _refreshTimer = null;
 function refreshCurrent() {
   if (!state.family?.id) return;
-  const tab = state.pendingTab;
-  if (tab === 'today') renderToday(view);
-  else if (tab === 'verify' && state.mode === 'parent') renderVerify(view);
-  else if (tab === 'stats') renderStats(view);
-  else if (tab === 'life' && state.mode === 'parent') renderLife(view);
-  else if (tab === 'setup' && state.mode === 'parent') renderSetup(view);
-  refreshPointBadge();
+  clearTimeout(_refreshTimer);
+  _refreshTimer = setTimeout(() => {
+    const tab = state.pendingTab;
+    if (tab === 'today') renderToday(view);
+    else if (tab === 'verify' && state.mode === 'parent') renderVerify(view);
+    else if (tab === 'stats') renderStats(view);
+    else if (tab === 'life' && state.mode === 'parent') renderLife(view);
+    else if (tab === 'setup' && state.mode === 'parent') renderSetup(view);
+    refreshPointBadge();
+  }, 150);
 }
 
 // ---------- 孩子切换 ----------

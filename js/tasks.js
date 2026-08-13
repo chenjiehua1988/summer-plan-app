@@ -83,7 +83,7 @@ export async function renderToday(view) {
       const allChildren = state.children?.length ? state.children : [{ id: childId, name: '' }];
       const msgs = [];
       for (const child of allChildren) {
-        const r = await db.settleDay(child.id, date);
+        const r = await db.settleDay(child.id, date, state.currentPlanId);
         if (r.err) continue; // 没任务就跳过
         const label = child.name ? `${child.name}：` : '';
         let msg = label;
