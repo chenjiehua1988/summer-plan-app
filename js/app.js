@@ -75,7 +75,10 @@ async function maybeEnterApp() {
 }
 
 // 第二天打开时自动结算昨天（所有孩子，每个孩子独立检查是否已结算）
+let _settling = false;
 async function autoSettleYesterday() {
+  if (_settling) return;
+  _settling = true;
   try {
     const fam = state.family;
     if (!fam?.id || !state.children.length) return;
@@ -108,6 +111,7 @@ async function autoSettleYesterday() {
     }
     if (hasResult) { toast(msg, 6000); if (window.refreshPointBadge) window.refreshPointBadge(); }
   } catch (e) { console.warn('autoSettle failed', e.message); }
+  finally { _settling = false; }
 }
 function applyModeUI() {
   const isChild = state.mode === 'child';
