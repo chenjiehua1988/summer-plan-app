@@ -235,6 +235,11 @@ export async function ensureDailyRecords(childId, date, planId) {
   if (error) throw error;
   // 生成：必须有当前周期
   if (!pid) return existing || [];
+  // 归档周期不再生成新任务（当天已有记录仅供查看）
+  if ((state.plans || []).find(p => p.id === pid)?.status === 'archived') {
+    await cacheRecords(existing || []);
+    return existing || [];
+  }
   // 顺手清理前一天的说明附件（说明附件是当天任务要求的载体，第二天起就没用了）
   try { cleanExpiredInstructionAttachments(childId, pid, date); } catch (e) { /* 静默 */ }
   const templates = await fetchTemplates(pid, childId);

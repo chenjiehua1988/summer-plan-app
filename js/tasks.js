@@ -15,6 +15,7 @@ export async function renderToday(view) {
     return;
   }
   const date = todayStr();
+  const planArchived = (state.plans || []).find(p => p.id === state.currentPlanId)?.status === 'archived';
   view.innerHTML = `<div class="loading">加载中…</div>`;
   let records = [];
   try { records = await db.ensureDailyRecords(childId, date, state.currentPlanId); }
@@ -48,7 +49,9 @@ export async function renderToday(view) {
       <button class="btn-ghost btn-sm" id="refreshToday">刷新</button>
     </div>
     <div class="dayoff-bar">
-      ${dayOff
+      ${planArchived
+        ? `<span>📦 当前周期已归档，任务仅供查看，不再生成新任务</span>`
+        : dayOff
         ? `<span>🏖️ 今天是假期${dayOff.reason ? '（' + dayOff.reason + '）' : ''}</span>
            ${state.mode === 'parent' ? `<button class="btn-ghost btn-sm" id="unmarkDayOff">取消假期</button>` : ''}`
         : (state.mode === 'parent'
@@ -57,7 +60,7 @@ export async function renderToday(view) {
                <button class="btn-primary btn-sm" id="btnSettle">结算当天</button>`
             : `<span style="color:var(--muted)">今天正常学习</span>`)}
     </div>
-    ${records.length === 0 ? `<div class="empty">今天还没有任务。去「设置」给当前周期/孩子添加任务清单。</div>` : ''}
+    ${records.length === 0 ? `<div class="empty">${planArchived ? '周期已归档，没有任务。' : '今天还没有任务。去「设置」给当前周期/孩子添加任务清单。'}</div>` : ''}
     ${groupKeys.map(g => `
       <div class="task-group-head">${g}</div>
       <ul class="task-list">${groups[g].map(r => taskRow(r)).join('')}</ul>

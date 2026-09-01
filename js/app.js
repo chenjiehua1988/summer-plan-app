@@ -52,8 +52,14 @@ async function maybeEnterApp() {
     state.tags = await db.fetchTags();
     if (state.mode === 'parent') state.planTypes = await db.fetchPlanTypes();
   } catch (e) { console.warn('load plans/tags', e); }
-  if (state.currentPlanId && !state.plans.find(p => p.id === state.currentPlanId)) {
+  const curPlan = state.currentPlanId ? state.plans.find(p => p.id === state.currentPlanId) : null;
+  if (state.currentPlanId && !curPlan) {
     state.currentPlanId = null;
+  }
+  // 上次选的周期已归档且有其他 active 周期 → 自动切到 active 周期
+  if (curPlan && curPlan.status === 'archived') {
+    const act = state.plans.find(p => p.status === 'active');
+    if (act) { state.currentPlanId = act.id; auth.switchPlan(act.id); }
   }
   if (!state.currentPlanId) {
     const firstActive = state.plans.find(p => p.status === 'active') || state.plans[0];
@@ -620,7 +626,18 @@ function renderPlansCard() {
     b.onclick = async () => {
       const p = state.plans.find(x => x.id === b.dataset.archive);
       const ns = p.status === 'archived' ? 'active' : 'archived';
-      try { await db.updatePlan(p.id, { status: ns }); p.status = ns; renderPlansCard(); toast(ns === 'archived' ? '已归档' : '已恢复'); }
+      try {
+        await db.updatePlan(p.id, { status: ns }); p.status = ns;
+        // 归档的是当前周期 → 自动切走（有其他 active 周期就切过去，否则置空）
+        if (ns === 'archived' && state.currentPlanId === p.id) {
+          const act = state.plans.find(x => x.status === 'active');
+          state.currentPlanId = act ? act.id : null;
+          auth.switchPlan(state.currentPlanId);
+          fillPlanSwitcher();
+          refreshCurrent();
+        }
+        renderPlansCard(); toast(ns === 'archived' ? '已归档' : '已恢复');
+      }
       catch (e) { toast('操作失败：' + e.message); }
     };
   });
