@@ -148,14 +148,17 @@ export async function updateTemplate(id, patch, tagIds) {
   }
   return data;
 }
-// 复制某旧周期某孩子的模板到新周期（用于"从上周期复制"）
-export async function copyTemplates(fromPlanId, toPlanId, childId) {
-  const src = await fetchTemplates(fromPlanId, childId);
+// 复制某周期某孩子的模板到另一周期；templateIds 可选，传了则只复制选中的
+// （用于"从上周期复制"与设置页"从历史周期复制"；起止日期不复制，避免跨周期越界）
+export async function copyTemplates(fromPlanId, toPlanId, childId, templateIds) {
+  let src = await fetchTemplates(fromPlanId, childId);
+  if (templateIds && templateIds.length) src = src.filter(t => templateIds.includes(t.id));
   if (!src.length) return 0;
   const rows = src.map(t => ({
     family_id: state.family.id, plan_id: toPlanId, child_id: childId,
     subject: t.subject, title: t.title, default_minutes: t.default_minutes,
-    points: t.points, recurrence: t.recurrence, active: t.active
+    points: t.points, recurrence: t.recurrence, active: t.active,
+    weekdays: t.weekdays || [], instruction: t.instruction || null
   }));
   const { data, error } = await supabase.from('task_templates').insert(rows).select();
   if (error) throw error;

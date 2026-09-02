@@ -799,11 +799,15 @@ export async function renderTemplates(container, childId) {
   const tags = state.tags;
 
   container.innerHTML = `
-    <button class="btn-primary btn-sm" id="tAdd" style="margin-bottom:10px">+ 添加任务</button>
+    <div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn-primary btn-sm" id="tAdd">+ 添加任务</button>
+      <button class="btn-ghost btn-sm" id="tCopy">📋 从历史周期复制</button>
+    </div>
     ${templates.length ? templates.map(t => tmplRow(t, tags)).join('') : `<div class="empty">还没有任务，添加第一个吧。</div>`}
   `;
 
   container.querySelector('#tAdd').onclick = () => openTemplatePanel(null, tags, container, childId);
+  container.querySelector('#tCopy').onclick = () => openCopyPanel(container, childId);
   container.querySelectorAll('[data-del]').forEach(b => {
     b.onclick = async () => {
       if (!confirm('删除该任务？')) return;
@@ -817,6 +821,73 @@ export async function renderTemplates(container, childId) {
       openTemplatePanel(t, tags, container, childId);
     };
   });
+}
+
+// 从历史周期复制任务面板：选来源周期 → 全选（全量）或勾选个别任务 → 复制到当前周期
+function openCopyPanel(container, childId) {
+  const others = state.plans.filter(p => p.id !== state.currentPlanId);
+  if (!others.length) { toast('没有其他周期可复制'); return; }
+  const overlay = document.createElement('div');
+  overlay.className = 'checkin-overlay';
+  overlay.innerHTML = `
+    <div class="checkin-sheet">
+      <div class="checkin-head">
+        <span class="checkin-title">从历史周期复制任务</span>
+        <button class="btn-ghost btn-sm" id="cpClose">取消</button>
+      </div>
+      <div class="tp-label">来源周期</div>
+      <select class="checkin-note" id="cpPlan">
+        ${others.map(p => `<option value="${p.id}">${p.name}（${p.type} ${p.start_date||''}~${p.end_date||''}${p.status==='archived'?' ·已归档':''}）</option>`).join('')}
+      </select>
+      <div id="cpList" style="margin-top:10px"></div>
+      <button class="btn-primary checkin-submit" id="cpSave">复制选中的任务</button>
+    </div>`;
+  document.body.style.overflow = 'hidden';
+  document.body.appendChild(overlay);
+  const $ = s => overlay.querySelector(s);
+  const close = () => { document.body.style.overflow = ''; overlay.remove(); };
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  $('#cpClose').onclick = close;
+
+  async function loadSrc() {
+    $('#cpList').innerHTML = `<div class="loading">加载中…</div>`;
+    let src = [];
+    let dupTitles = new Set();
+    try {
+      src = await db.fetchTemplates($('#cpPlan').value, childId);
+      // 当前周期已有同名任务的做标记，防重复
+      const cur = await db.fetchTemplates(state.currentPlanId, childId);
+      dupTitles = new Set(cur.map(t => t.title));
+    } catch (e) { $('#cpList').innerHTML = `<div class="empty">加载失败：${e.message}</div>`; return; }
+    if (!src.length) { $('#cpList').innerHTML = `<div class="empty">该周期此孩子没有任务可复制。</div>`; return; }
+    $('#cpList').innerHTML = `
+      <label class="tp-label" style="display:flex;align-items:center;gap:6px">
+        <input type="checkbox" id="cpAll" checked> 全选（全量复制）
+      </label>
+      ${src.map(t => `
+        <label style="display:flex;align-items:center;gap:8px;padding:7px 2px;border-bottom:1px solid var(--line)">
+          <input type="checkbox" class="cp-item" data-id="${t.id}" checked>
+          <span style="flex:1">${t.title}${dupTitles.has(t.title) ? ' <small style="color:var(--warn)">（已有同名）</small>' : ''}</span>
+          <small style="color:var(--muted)">${t.subject} · ${t.points}分</small>
+        </label>`).join('')}`;
+    const syncAll = () => { $('#cpAll').checked = [...overlay.querySelectorAll('.cp-item')].every(x => x.checked); };
+    $('#cpAll').onchange = () => overlay.querySelectorAll('.cp-item').forEach(x => x.checked = $('#cpAll').checked);
+    overlay.querySelectorAll('.cp-item').forEach(x => x.onchange = syncAll);
+  }
+  loadSrc();
+  $('#cpPlan').onchange = loadSrc;
+
+  $('#cpSave').onclick = async () => {
+    const sel = [...overlay.querySelectorAll('.cp-item:checked')].map(x => x.dataset.id);
+    if (!sel.length) { toast('请至少勾选一个任务（不复制就点取消）'); return; }
+    try {
+      $('#cpSave').disabled = true;
+      const n = await db.copyTemplates($('#cpPlan').value, state.currentPlanId, childId, sel);
+      toast(`已复制 ${n} 个任务`);
+      close();
+      renderTemplates(container, childId);
+    } catch (e) { toast('复制失败：' + e.message); $('#cpSave').disabled = false; }
+  };
 }
 
 // 任务编辑/添加面板（底部抽屉）
