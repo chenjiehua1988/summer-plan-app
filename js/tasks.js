@@ -32,12 +32,13 @@ export async function renderToday(view) {
   const doneCount = records.filter(r => r.status === 'done' || r.status === 'verified').length;
   const effectiveTotal = records.filter(r => r.status !== 'skipped').length;
   // 分组：一次性任务单独一组，每日任务按标签分组
+  // 多标签任务只进第一个标签组（行上仍显示全部标签），避免同一任务在多个组重复出现
   const groups = {};
   const onceGroup = [];
   records.forEach(r => {
     if (r.recurrence === 'once') { onceGroup.push(r); return; }
     const tags = (r.tags && r.tags.length) ? r.tags : ['其他'];
-    tags.forEach(tg => { (groups[tg] = groups[tg] || []).push(r); });
+    (groups[tags[0]] = groups[tags[0]] || []).push(r);
   });
   const groupKeys = Object.keys(groups);
 
