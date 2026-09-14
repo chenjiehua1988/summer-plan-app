@@ -996,13 +996,9 @@ function openTemplatePanel(t, tags, container, childId) {
     try {
       if (isEdit) {
         await db.updateTemplate(t.id, patch, patch.tagIds);
-        // 标签有改动 → 同步今天已生成记录的 tags 快照（背诵区块等按快照识别）
-        const oldNames = (cur.tagIds || []);
-        const changed = oldNames.length !== patch.tagIds.length || patch.tagIds.some(id => !oldNames.includes(id));
-        if (changed) {
-          const names = patch.tagIds.map(id => (tags.find(x => x.id === id) || {}).name).filter(Boolean);
-          try { await db.syncTemplateTagsToRecords(t.id, names); } catch (e) { console.warn('sync tags', e.message); }
-        }
+        // 总是同步今天已生成记录的 tags 快照（背诵区块等按快照识别；历史日期不动）
+        const names = patch.tagIds.map(id => (tags.find(x => x.id === id) || {}).name).filter(Boolean);
+        try { await db.syncTemplateTagsToRecords(t.id, names); } catch (e) { console.warn('sync tags', e.message); }
       } else {
         await db.addTemplate({ ...patch, plan_id: state.currentPlanId, child_id: childId });
       }
