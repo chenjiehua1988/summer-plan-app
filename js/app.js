@@ -7,7 +7,7 @@ import * as db from './db.js';
 import { renderToday, renderTemplates } from './tasks.js';
 import { renderVerify } from './verify.js';
 import { renderStats } from './stats.js';
-import { renderLife } from './life.js';
+import { renderRecite } from './recite.js';
 import { renderPoints, refreshPointBadge } from './points.js';
 import { enablePush, disablePush, isPushEnabled } from './push.js';
 
@@ -123,7 +123,7 @@ function applyModeUI() {
   const isChild = state.mode === 'child';
   document.querySelectorAll('.tab').forEach(t => {
     const tab = t.dataset.tab;
-    if (isChild && (tab === 'verify' || tab === 'setup' || tab === 'life')) t.style.display = 'none';
+    if (isChild && (tab === 'verify' || tab === 'setup')) t.style.display = 'none';
     else t.style.display = '';
   });
   const cs = document.getElementById('childSwitcher');
@@ -296,8 +296,6 @@ function bindTabs() {
 function switchTab(tab) {
   // child 模式屏蔽 verify/setup
   if (state.mode === 'child' && (tab === 'verify' || tab === 'setup')) return;
-  // life 暂未对孩子适配，孩子模式下也屏蔽
-  if (state.mode === 'child' && tab === 'life') return;
   state.pendingTab = tab;
   document.querySelectorAll('.tab').forEach(t =>
     t.classList.toggle('active', t.dataset.tab === tab));
@@ -313,7 +311,7 @@ function refreshCurrent() {
     if (tab === 'today') renderToday(view);
     else if (tab === 'verify' && state.mode === 'parent') renderVerify(view);
     else if (tab === 'stats') renderStats(view);
-    else if (tab === 'life' && state.mode === 'parent') renderLife(view);
+    else if (tab === 'recite') renderRecite(view);
     else if (tab === 'setup' && state.mode === 'parent') renderSetup(view);
     refreshPointBadge();
   }, 150);

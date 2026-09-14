@@ -3,7 +3,7 @@
 // 设计：Supabase 为唯一权威源；IndexedDB 仅缓存近 14 天数据供离线浏览。
 // 断网时打卡进入本地队列，联网后批量 upsert，带 updated_at 时间戳做 LWW。
 // ============================================================
-import { supabase, state, toast, actorName } from './supabase.js';
+import { supabase, state, toast, actorName, todayStr } from './supabase.js';
 
 const DB_NAME = 'summer-plan-cache';
 const DB_VERSION = 1;
@@ -508,6 +508,9 @@ export function subscribeRecords(childId, onChange) {
       () => onChange && onChange())
     .on('postgres_changes',
       { event: '*', schema: 'public', table: 'day_off', filter: 'child_id=eq.' + childId },
+      () => onChange && onChange())
+    .on('postgres_changes',
+      { event: '*', schema: 'public', table: 'recitations', filter: 'child_id=eq.' + childId },
       () => onChange && onChange())
     .subscribe();
 }
@@ -1107,4 +1110,82 @@ async function sendPushToChild(childId, title, body) {
       body: payload
     });
   } catch (e) { console.warn('push failed', e.message); }
+}
+
+// ---------- 背诵模块（新概念课文/单词） ----------
+// 某孩子全部背诵记录（近500条，倒序）
+export async function fetchRecitations(childId) {
+  const { data, error } = await supabase.from('recitations').select('*')
+    .eq('family_id', state.family.id).eq('child_id', childId)
+    .order('recite_date', { ascending: false }).order('created_at', { ascending: false })
+    .limit(500);
+  if (error) throw error;
+  return data || [];
+}
+export async function addRecitation(r) {
+  const row = {
+    family_id: state.family.id, child_id: r.child_id,
+    book: r.book, lesson_no: r.lesson_no, kind: r.kind || 'review',
+    text_quality: r.text_quality ?? null,
+    wrong_words: r.wrong_words || [], words_total: r.words_total || 0,
+    audio_urls: r.audio_urls || [], note: r.note || null,
+    recite_date: r.recite_date || todayStr(), created_by: actorName()
+  };
+  const { data, error } = await supabase.from('recitations').insert(row).select().single();
+  if (error) throw error;
+  return data;
+}
+export async function deleteRecitation(id) {
+  const { error } = await supabase.from('recitations').delete().eq('id', id);
+  if (error) throw error;
+}
+// 某本书全部课次词表
+export async function fetchAllLessonWords(book) {
+  const { data, error } = await supabase.from('lesson_words').select('*')
+    .eq('family_id', state.family.id).eq('book', book).order('lesson_no');
+  if (error) throw error;
+  return data || [];
+}
+export async function fetchLessonWords(book, lessonNo) {
+  const { data, error } = await supabase.from('lesson_words').select('*')
+    .eq('family_id', state.family.id).eq('book', book).eq('lesson_no', lessonNo).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+// 保存（upsert）某课词表
+export async function saveLessonWords(book, lessonNo, words) {
+  const { data, error } = await supabase.from('lesson_words').upsert(
+    { family_id: state.family.id, book, lesson_no: lessonNo, words, updated_at: new Date().toISOString() },
+    { onConflict: 'family_id,book,lesson_no' }
+  ).select().single();
+  if (error) throw error;
+  return data;
+}
+// 倒序复习游标（某孩子某本书）
+export async function fetchReciteStates(childId) {
+  const { data, error } = await supabase.from('recite_state').select('*')
+    .eq('family_id', state.family.id).eq('child_id', childId);
+  if (error) throw error;
+  return data || [];
+}
+export async function upsertReciteState(childId, book, cursorLesson) {
+  const { error } = await supabase.from('recite_state').upsert(
+    { family_id: state.family.id, child_id: childId, book, cursor_lesson: cursorLesson, updated_at: new Date().toISOString() },
+    { onConflict: 'family_id,child_id,book' }
+  );
+  if (error) throw error;
+}
+// 上传背诵录音（verify-photos 桶 recite/ 前缀）
+export async function uploadReciteAudio(childId, blob, ext) {
+  const fam = state.family.id;
+  const ts = Date.now();
+  const path = `recite/${fam}/${childId}/${ts}_${Math.random().toString(36).slice(2, 6)}.${ext}`;
+  const uploadPromise = supabase.storage.from('verify-photos').upload(path, blob, {
+    contentType: blob.type || `audio/${ext}`, upsert: false
+  });
+  const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('上传超时')), 60000));
+  const { error } = await Promise.race([uploadPromise, timeoutPromise]);
+  if (error) throw error;
+  const { data: pub } = supabase.storage.from('verify-photos').getPublicUrl(path);
+  return pub.publicUrl;
 }

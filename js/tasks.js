@@ -5,6 +5,7 @@ import { supabase, state, todayStr, toast, actorName, segHtml, bindSeg, hm, mdhm
 import * as db from './db.js';
 import { viewFullPhoto } from './photo-viewer.js';
 import { compressAudio } from './db.js';
+import { isReciteTask, mountCheckinRecite } from './recite.js';
 
 // 今日打卡视图：渲染当天 daily_records，按标签分组；支持假期标记与打卡拍照
 export async function renderToday(view) {
@@ -485,6 +486,9 @@ function openCheckinPanel(id, r, records, el) {
   document.body.appendChild(overlay);
   const $ = sel => overlay.querySelector(sel);
 
+  // 背诵类任务：挂背诵登记区块（选填），打卡提交时一并写入
+  const recite = isReciteTask(r) ? mountCheckinRecite(overlay, r) : null;
+
   const doClose = () => { stopRecIf(); document.body.style.overflow = ''; overlay.remove(); };
   const close = () => {
     if (st.recording) { toast('录音中，请先停止录音再关闭'); return; }
@@ -644,6 +648,8 @@ function openCheckinPanel(id, r, records, el) {
         Object.assign(r, patch);
       }
       r.note = note || null; r.photos = allPhotos; r.audios = allAudios;
+      // 背诵登记（失败不影响打卡本身）
+      if (recite) { try { await recite.save(); } catch (e) { console.warn('recite save', e.message); toast('背诵登记失败：' + e.message); } }
       toast('已打卡 ✓');
       document.body.style.overflow = ''; overlay.remove();
       renderToday(document.getElementById('view'));
