@@ -33,9 +33,9 @@ function parseWordList(text) {
 function wordKey(w) { return String(w).trim().split(/\s+/)[0]; }
 
 // ---------- 任务是否显示背诵登记区块（今日打卡面板用） ----------
+// 以标签为准：任务标签含「背诵」才显示登记区块
 export function isReciteTask(r) {
-  const hay = (r.title || '') + '|' + (r.tags || []).join('|');
-  return /新概念|背诵|课文|单词/.test(hay);
+  return (r.tags || []).some(t => /背诵/.test(t));
 }
 
 // ---------- 统计：每课熟练度（由记录推导，不落库） ----------
