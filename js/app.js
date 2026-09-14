@@ -268,10 +268,12 @@ function bindPlanSwitcher() {
 function fillPlanSwitcher() {
   const sel = document.getElementById('planSwitcher');
   if (!sel) return;
-  const opts = state.plans.map(p =>
-    `<option value="${p.id}" ${p.status === 'archived' ? 'data-arch':''}>${p.name}${p.status === 'archived' ? '(归档)' : ''}</option>`).join('');
+  // 归档周期不进下拉
+  const opts = state.plans.filter(p => p.status !== 'archived').map(p =>
+    `<option value="${p.id}">${p.name}</option>`).join('');
   sel.innerHTML = `<option value="">(无周期)</option>` + opts;
-  if (state.currentPlanId) sel.value = state.currentPlanId;
+  const cur = state.plans.find(p => p.id === state.currentPlanId);
+  if (cur && cur.status !== 'archived') sel.value = state.currentPlanId;
   updatePlanCountdown();
 }
 function updatePlanCountdown() {
