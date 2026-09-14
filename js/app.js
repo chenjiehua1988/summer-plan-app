@@ -424,7 +424,17 @@ function renderSetup(view) {
 
     <div class="section-title">账号</div>
     <div class="card"><button class="btn-ghost btn-sm" id="btnLogout">退出登录</button></div>
+    <div class="progress-label" id="swVer" style="text-align:center;margin-top:6px"></div>
   `;
+
+  // 显示当前前端缓存版本（排查"改动没生效"用）
+  if (window.caches && caches.keys) {
+    caches.keys().then(ks => {
+      const v = ks.find(k => /^summer-plan-v/.test(k));
+      const el = view.querySelector('#swVer');
+      if (el) el.textContent = v ? `前端版本：${v.replace('summer-plan-', '')}` : '';
+    }).catch(() => {});
+  }
 
   renderRedeemReqCard();
   initPushToggle();
