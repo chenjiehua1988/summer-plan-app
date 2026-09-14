@@ -132,6 +132,13 @@ export async function deleteTemplate(id) {
   const { error } = await supabase.from('task_templates').delete().eq('id', id);
   if (error) throw error;
 }
+// 模板标签改动后，同步今天已生成记录的 tags 快照（历史日期不改）
+export async function syncTemplateTagsToRecords(templateId, tagNames) {
+  const { error } = await supabase.from('daily_records')
+    .update({ tags: tagNames || [], updated_at: new Date().toISOString() })
+    .eq('task_id', templateId).eq('date', todayStr());
+  if (error) throw error;
+}
 // 改任务：patch 含任务字段；tagIds 若提供则重置标签（tagIds 不是表字段，update 前剔除）
 export async function updateTemplate(id, patch, tagIds) {
   const { tagIds: _omit, ...fields } = patch;  // 剔除 tagIds，不传给表
