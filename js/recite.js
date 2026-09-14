@@ -447,24 +447,37 @@ export function openRecitePanel(childId, onSaved) {
 // ============================================================
 // 今日打卡面板内的精简背诵区块（tasks.js 的 openCheckinPanel 调用）
 // 用法：const recite = mountCheckinRecite(overlay, r); 打卡提交时 await recite.save();
+// 默认收起（save() 不产生记录），点开登记才写入 —— 新课学习前几天无需理会
 // ============================================================
 export function mountCheckinRecite(overlay, r) {
   const sheet = overlay.querySelector('.checkin-sheet');
   const submitBtn = overlay.querySelector('#ckSubmit');
   const box = document.createElement('div');
   box.innerHTML = `
-    <div class="tp-label" style="margin-top:10px">📖 背诵登记（选填）</div>
-    <div class="tp-row">
-      <div class="seg" id="crKind"></div>
-      <label class="tp-label">课号 <input type="number" id="crLesson" min="1" style="width:70px"></label>
+    <div class="tp-row" id="crToggle" style="margin-top:10px;align-items:center;cursor:pointer;user-select:none">
+      <div class="tp-label" style="flex:1">📖 背诵登记（选填）</div>
+      <span class="btn-ghost btn-sm" id="crToggleBtn">背了？点开登记 ▾</span>
     </div>
-    <div class="seg-block" id="crQuality" style="margin-top:6px"></div>
-    <div id="crWords"></div>`;
+    <div id="crBody" style="display:none">
+      <div class="tp-row">
+        <div class="seg" id="crKind"></div>
+        <label class="tp-label">课号 <input type="number" id="crLesson" min="1" style="width:70px"></label>
+      </div>
+      <div class="seg-block" id="crQuality" style="margin-top:6px"></div>
+      <div id="crWords"></div>
+    </div>`;
   sheet.insertBefore(box, submitBtn);
   const $ = s => box.querySelector(s);
 
-  const f = { book: BOOKS[0], kind: 'new', quality: 'perfect', lesson: 0, wrong: new Set(), words: null };
-  let existed = new Set(), cursor = null, maxLearned = 0, ready = false;
+  // 默认收起：新课学习前几天打卡不用管这里，背了才点开
+  // 类型按任务名猜：带「旧/复习」默认复习，否则新课
+  const f = { book: BOOKS[0], kind: /旧|复习/.test(r.title || '') ? 'review' : 'new', quality: 'perfect', lesson: 0, wrong: new Set(), words: null };
+  let existed = new Set(), cursor = null, maxLearned = 0, ready = false, expanded = false;
+  $('#crToggle').onclick = () => {
+    expanded = !expanded;
+    $('#crBody').style.display = expanded ? '' : 'none';
+    $('#crToggleBtn').textContent = expanded ? '收起 ▴' : '背了？点开登记 ▾';
+  };
 
   function renderKind() {
     $('#crKind').innerHTML = segHtml([{ value: 'new', label: '新课' }, { value: 'review', label: '复习' }], f.kind);
@@ -523,6 +536,7 @@ export function mountCheckinRecite(overlay, r) {
 
   return {
     async save() {
+      if (!expanded) return; // 收起状态 = 今天不登记背诵
       const lessonNo = +$('#crLesson').value || 0;
       if (!ready || !lessonNo) return; // 没填课号 = 不登记
       const manual = box.querySelector('#crWrongManual');
