@@ -33,9 +33,15 @@ function addDays(dateStr, n) {
   d.setDate(d.getDate() + n);
   return todayStr(d);
 }
-// 词表粘贴解析：换行/逗号/顿号/分号/多空格分隔，每项如 "mistake 错误"
+// 词表粘贴解析：一行一条；整行带空格（词+释义）就整行保留，释义里的逗号不拆；
+// 只有不含空格的裸词行才按逗号/顿号/分号拆开
 function parseWordList(text) {
-  return text.split(/[\n,，、;；]+/).map(s => s.trim()).filter(Boolean).slice(0, 100);
+  const out = [];
+  text.split(/\n+/).map(s => s.trim()).filter(Boolean).forEach(line => {
+    if (/\s/.test(line)) { out.push(line); return; }
+    line.split(/[,，、;；]+/).map(s => s.trim()).filter(Boolean).forEach(w => out.push(w));
+  });
+  return out.slice(0, 100);
 }
 // 单词键：取首词（去释义），错词记录/生词本统一用它
 function wordKey(w) { return String(w).trim().split(/\s+/)[0]; }
@@ -465,7 +471,7 @@ export function openWordListPanel(childId, onSaved) {
         <label class="tp-label">课号 <input type="number" id="wpLesson" min="1" style="width:76px"></label>
       </div>
       <div id="wpLearned" style="margin:6px 0"></div>
-      <textarea class="checkin-note" id="wpPaste" rows="6" placeholder="一行一个，也可空格/逗号隔开；可带释义，如：mistake 错误"></textarea>
+      <textarea class="checkin-note" id="wpPaste" rows="6" placeholder="一行一个，可带释义，如：mistake 错误"></textarea>
       <div class="checkin-hint" id="wpCount" style="margin:6px 0"></div>
       <button class="btn-primary checkin-submit" id="wpSave">保存词表</button>
     </div>`;
@@ -529,7 +535,8 @@ export function openWordListPanel(childId, onSaved) {
   }
   function updCount() {
     const n = parseWordList($('#wpPaste').value).length;
-    $('#wpCount').textContent = n ? `将保存 ${n} 个词` : '留空保存 = 清空该课词表';
+    const to = `${f.book} L${+$('#wpLesson').value || '?'}`;
+    $('#wpCount').textContent = n ? `将保存 ${n} 个词 → ${to}` : `留空保存 = 清空 ${to} 的词表`;
   }
   $('#wpPaste').oninput = updCount;
 
