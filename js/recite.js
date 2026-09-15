@@ -20,6 +20,14 @@ function lessonList(book) {
   for (let i = 1; i <= 96; i++) a.push(i);
   return a;
 }
+// 新概念一按“对”学习：单课(课文)+配对双课(练习)的词都挂在单课号下，
+// 登记只填单课号，复习步长按单课(-2)；新概念二逐课步长 1
+function pairStep(book) { return book === '新概念一' ? 2 : 1; }
+// 下一节新课号（新概念一取下一个单课）
+function nextNewLesson(book, maxLearned) {
+  if (pairStep(book) === 1) return maxLearned + 1;
+  return maxLearned % 2 === 1 ? maxLearned + 2 : maxLearned + 1;
+}
 function addDays(dateStr, n) {
   const d = new Date(dateStr + 'T00:00:00');
   d.setDate(d.getDate() + n);
@@ -182,8 +190,9 @@ function suggestionHtml(name, book, stats, cursor) {
   if (cursor == null) line = `▶️ 建议开始倒序复习，从 <b>L${learned[0]}</b> 往前`;
   else if (cursor <= 1) line = `🔄 第一轮倒序已扫完，建议从 <b>L${learned[0]}</b> 重新开始`;
   else {
-    const nexts = [cursor - 1, cursor - 2].filter(l => l >= 1 && stats[l]);
-    line = nexts.length ? `➡️ 倒序复习：<b>${nexts.map(l => 'L' + l).join('、')}</b>` : `➡️ 倒序复习：继续往前（L${cursor - 1} 之前还没背）`;
+    const s = pairStep(book);
+    const nexts = [cursor - s, cursor - 2 * s].filter(l => l >= 1 && stats[l]);
+    line = nexts.length ? `➡️ 倒序复习：<b>${nexts.map(l => 'L' + l).join('、')}</b>` : `➡️ 倒序复习：继续往前（L${cursor - s} 之前还没背）`;
   }
   const odLine = overdue.length
     ? `<div class="rc-od">⏰ 插队：${overdue.slice(0, 3).map(l => `<b>L${l}</b>`).join('、')} 已超期（上次 ${stats[overdue[0]].lastDate}）</div>` : '';
@@ -358,7 +367,7 @@ export function openRecitePanel(childId, onSaved) {
         const st = sts.find(x => x.book === f.book);
         cursor = st ? st.cursor_lesson : null;
       } catch (e) { console.warn('recite reset', e.message); }
-      f.lesson = f.kind === 'new' ? maxLearned + 1 : (cursor ? Math.max(1, cursor - 1) : maxLearned);
+      f.lesson = f.kind === 'new' ? nextNewLesson(f.book, maxLearned) : (cursor ? Math.max(1, cursor - pairStep(f.book)) : maxLearned);
       $('#rpLesson').value = f.lesson;
       loadWords();
     })();
@@ -475,8 +484,8 @@ export function openWordListPanel(childId, onSaved) {
       const recs = await db.fetchRecitations(childId);
       if (recs.length) f.book = recs[0].book;
       existed = new Set(recs.filter(r => r.book === f.book).map(r => r.lesson_no));
-      // 默认课号 = 最近学过的一课的下一课（家长一般提前录要学的课）
-      if (existed.size) f.lesson = Math.max(...existed) + 1;
+      // 默认课号 = 下一个新课（新概念一取下一个单课）
+      if (existed.size) f.lesson = nextNewLesson(f.book, Math.max(...existed));
     } catch (e) { console.warn('wordlist init', e.message); }
     $('#wpBook').innerHTML = segHtml(BOOKS, f.book, true);
     bindSeg($('#wpBook'), v => {
@@ -487,7 +496,7 @@ export function openWordListPanel(childId, onSaved) {
           const recs = await db.fetchRecitations(childId);
           existed = new Set(recs.filter(r => r.book === f.book).map(r => r.lesson_no));
         } catch (e) {}
-        f.lesson = existed.size ? Math.max(...existed) + 1 : 1;
+        f.lesson = existed.size ? nextNewLesson(f.book, Math.max(...existed)) : 1;
         $('#wpLesson').value = f.lesson;
         renderLearned(); loadList();
       })();
@@ -580,7 +589,7 @@ export function mountCheckinRecite(overlay, r) {
     bindSeg($('#crKind'), v => { f.kind = v; resetLessonDefault(); });
   }
   function resetLessonDefault() {
-    f.lesson = f.kind === 'new' ? maxLearned + 1 : (cursor ? Math.max(1, cursor - 1) : maxLearned);
+    f.lesson = f.kind === 'new' ? nextNewLesson(f.book, maxLearned) : (cursor ? Math.max(1, cursor - pairStep(f.book)) : maxLearned);
     $('#crLesson').value = f.lesson;
     loadWords();
   }
