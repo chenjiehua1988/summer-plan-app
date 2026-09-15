@@ -113,14 +113,9 @@ export async function renderRecite(view) {
   view.innerHTML = `<div class="loading">加载中…</div>`;
   try {
     const isParent = state.mode === 'parent';
-    const kids = isParent ? state.children : state.children.filter(c => c.id === childId);
-    // 每个孩子的记录 + 游标
-    const per = {};
-    for (const c of kids) {
-      const [recs, sts] = await Promise.all([db.fetchRecitations(c.id), db.fetchReciteStates(c.id)]);
-      per[c.id] = { name: c.name, recs, sts };
-    }
-    const me = per[childId];
+    const c = state.children.find(x => x.id === childId) || { name: '' };
+    // 只加载当前选中孩子的记录（与进度/历史一致，不再显示其他孩子的建议卡）
+    const [recs, sts] = await Promise.all([db.fetchRecitations(childId), db.fetchReciteStates(childId)]);
     // 词表（生词本计算用）
     const listsByBook = {};
     for (const b of BOOKS) {
@@ -133,34 +128,32 @@ export async function renderRecite(view) {
           <div class="date-label">📖 背诵</div>
           <div class="progress-label">课文背诵 · 单词 · 复习提醒</div>
         </div>
-        ${isParent ? `<button class="btn-primary btn-sm" id="rcAdd">＋ 补录</button>` : ''}
+        ${isParent ? `<div style="display:flex;gap:8px">
+          <button class="btn-ghost btn-sm" id="rcWords">📋 词表</button>
+          <button class="btn-primary btn-sm" id="rcAdd">＋ 补录</button></div>` : ''}
       </div>
       <div id="rcSug"></div>
       <div class="section-title">进度与熟练度</div>
-      <div id="rcProgress">${progressHtml(me.recs, listsByBook)}</div>
+      <div id="rcProgress">${progressHtml(recs, listsByBook)}</div>
       <div class="section-title">最近记录</div>
       <div id="rcHistory"></div>
     `;
 
-    // 建议卡（每个孩子每本书一块）
+    // 复习建议卡（当前孩子的每本书一块）
     const sugEl = view.querySelector('#rcSug');
-    sugEl.innerHTML = kids.map(c => {
-      const p = per[c.id];
-      const books = [...new Set(p.recs.map(r => r.book))];
-      if (!books.length) return '';
-      return books.map(b => {
-        const stats = calcLessonStats(p.recs, b);
-        const st = p.sts.find(x => x.book === b);
-        const cur = st ? st.cursor_lesson : null;
-        return suggestionHtml(p.name, b, stats, cur);
-      }).join('');
+    const books = [...new Set(recs.map(r => r.book))];
+    sugEl.innerHTML = books.map(b => {
+      const stats = calcLessonStats(recs, b);
+      const st = sts.find(x => x.book === b);
+      const cur = st ? st.cursor_lesson : null;
+      return suggestionHtml(c.name, b, stats, cur);
     }).join('') || `<div class="empty">还没有背诵记录。完成背诵类任务的打卡，或由家长「补录」。</div>`;
 
     // 历史列表
     const histEl = view.querySelector('#rcHistory');
-    if (!me.recs.length) histEl.innerHTML = `<div class="empty">还没有背诵记录。</div>`;
+    if (!recs.length) histEl.innerHTML = `<div class="empty">还没有背诵记录。</div>`;
     else {
-      histEl.innerHTML = `<ul class="task-list">${me.recs.slice(0, 30).map(r => histRow(r, isParent)).join('')}</ul>`;
+      histEl.innerHTML = `<ul class="task-list">${recs.slice(0, 30).map(r => histRow(r, isParent)).join('')}</ul>`;
       histEl.querySelectorAll('[data-delrec]').forEach(b => {
         b.onclick = async () => {
           if (!confirm('删除这条背诵记录？熟练度会重新计算。')) return;
@@ -170,9 +163,11 @@ export async function renderRecite(view) {
       });
     }
 
-    // 补录
+    // 补录 / 词表管理
     const addBtn = view.querySelector('#rcAdd');
     if (addBtn) addBtn.onclick = () => openRecitePanel(childId, () => renderRecite(view));
+    const wlBtn = view.querySelector('#rcWords');
+    if (wlBtn) wlBtn.onclick = () => openWordListPanel(childId, () => renderRecite(view));
   } catch (e) {
     console.warn(e);
     view.innerHTML = `<div class="empty">加载失败：${e.message}</div>`;
@@ -441,6 +436,107 @@ export function openRecitePanel(childId, onSaved) {
       close();
       onSaved && onSaved();
     } catch (e) { toast('保存失败：' + e.message); btn.disabled = false; btn.textContent = '保存'; }
+  };
+}
+
+// ============================================================
+// 词表管理面板：只维护某本书某课的单词表，不产生任何背诵记录
+// ============================================================
+export function openWordListPanel(childId, onSaved) {
+  const overlay = document.createElement('div');
+  overlay.className = 'checkin-overlay';
+  overlay.innerHTML = `
+    <div class="checkin-sheet">
+      <div class="checkin-head">
+        <span class="checkin-title">课程词表</span>
+        <button class="btn-ghost btn-sm" id="wpClose">取消</button>
+      </div>
+      <div class="tp-row">
+        <div class="seg-block" id="wpBook" style="flex:1"></div>
+        <label class="tp-label">课号 <input type="number" id="wpLesson" min="1" style="width:76px"></label>
+      </div>
+      <div id="wpLearned" style="margin:6px 0"></div>
+      <textarea class="checkin-note" id="wpPaste" rows="6" placeholder="一行一个，也可空格/逗号隔开；可带释义，如：mistake 错误"></textarea>
+      <div class="checkin-hint" id="wpCount" style="margin:6px 0"></div>
+      <button class="btn-primary checkin-submit" id="wpSave">保存词表</button>
+    </div>`;
+  document.body.style.overflow = 'hidden';
+  document.body.appendChild(overlay);
+  const $ = s => overlay.querySelector(s);
+  const close = () => { document.body.style.overflow = ''; overlay.remove(); };
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  $('#wpClose').onclick = close;
+
+  const f = { book: BOOKS[0], lesson: 1 };
+  let existed = new Set();
+
+  (async () => {
+    try {
+      const recs = await db.fetchRecitations(childId);
+      if (recs.length) f.book = recs[0].book;
+      existed = new Set(recs.filter(r => r.book === f.book).map(r => r.lesson_no));
+      // 默认课号 = 最近学过的一课的下一课（家长一般提前录要学的课）
+      if (existed.size) f.lesson = Math.max(...existed) + 1;
+    } catch (e) { console.warn('wordlist init', e.message); }
+    $('#wpBook').innerHTML = segHtml(BOOKS, f.book, true);
+    bindSeg($('#wpBook'), v => {
+      f.book = v;
+      existed = new Set(); // 换书后重新拉已学课
+      (async () => {
+        try {
+          const recs = await db.fetchRecitations(childId);
+          existed = new Set(recs.filter(r => r.book === f.book).map(r => r.lesson_no));
+        } catch (e) {}
+        f.lesson = existed.size ? Math.max(...existed) + 1 : 1;
+        $('#wpLesson').value = f.lesson;
+        renderLearned(); loadList();
+      })();
+    });
+    $('#wpLesson').value = f.lesson;
+    renderLearned();
+    loadList();
+  })();
+
+  // 最近学过的课，点一下快速填课号
+  function renderLearned() {
+    const ls = [...existed].sort((a, b) => b - a).slice(0, 12);
+    $('#wpLearned').innerHTML = ls.length
+      ? `<div class="rc-wordchips">${ls.map(l => `<span class="word-chip" data-l="${l}">L${l}</span>`).join('')}</div>` : '';
+    $('#wpLearned').querySelectorAll('[data-l]').forEach(ch => ch.onclick = () => {
+      f.lesson = +ch.dataset.l; $('#wpLesson').value = f.lesson; loadList();
+    });
+  }
+  $('#wpLesson').onchange = () => { f.lesson = +$('#wpLesson').value || 0; if (f.lesson) loadList(); };
+
+  async function loadList() {
+    const ta = $('#wpPaste');
+    if (!f.lesson) { ta.value = ''; updCount(); return; }
+    ta.value = '加载中…'; ta.disabled = true;
+    let words = [];
+    try { const row = await db.fetchLessonWords(f.book, f.lesson); words = row ? (row.words || []) : []; } catch (e) {}
+    ta.value = words.join('\n');
+    ta.disabled = false;
+    updCount();
+  }
+  function updCount() {
+    const n = parseWordList($('#wpPaste').value).length;
+    $('#wpCount').textContent = n ? `将保存 ${n} 个词` : '留空保存 = 清空该课词表';
+  }
+  $('#wpPaste').oninput = updCount;
+
+  $('#wpSave').onclick = async () => {
+    const lessonNo = +$('#wpLesson').value || 0;
+    if (!lessonNo) { toast('请填课号'); return; }
+    const words = parseWordList($('#wpPaste').value);
+    if (!words.length && !confirm(`清空 ${f.book} L${lessonNo} 的词表？`)) return;
+    const btn = $('#wpSave');
+    btn.disabled = true; btn.textContent = '保存中…';
+    try {
+      await db.saveLessonWords(f.book, lessonNo, words);
+      toast('词表已保存 ✓ 孩子打卡时即可点选标错');
+      close();
+      onSaved && onSaved();
+    } catch (e) { toast('保存失败：' + e.message); btn.disabled = false; btn.textContent = '保存词表'; }
   };
 }
 
