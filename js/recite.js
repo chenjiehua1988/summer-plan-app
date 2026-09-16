@@ -153,6 +153,14 @@ export async function renderRecite(view) {
       <div id="rcHistory"></div>
     `;
 
+    // 点进度格子 → 看这一课的全部历史（手机也能用）
+    view.querySelectorAll('#rcProgress [data-lg]').forEach(cell => {
+      cell.onclick = () => {
+        const [b, l] = cell.dataset.lg.split('|');
+        openLessonHistory(b, +l, recs, isParent, () => renderRecite(view));
+      };
+    });
+
     // 复习建议卡（当前孩子的每本书一块）
     const sugEl = view.querySelector('#rcSug');
     const books = [...new Set(recs.map(r => r.book))];
@@ -221,7 +229,7 @@ function progressHtml(recs, listsByBook) {
       const s = stats[l];
       const cls = s ? 'lv' + s.level + (s.overdue ? ' od' : '') : '';
       const tip = s ? `L${l}：背过${s.recs.length}次 · ${Q_LABEL[s.recs[s.recs.length - 1].text_quality] || '—'} · 上次 ${s.lastDate}` : `L${l}：未背`;
-      return `<span class="rg-cell ${cls}" title="${tip}">${l}</span>`;
+      return `<span class="rg-cell ${cls}" data-lg="${b}|${l}" style="cursor:pointer" title="${tip}">${l}</span>`;
     }).join('');
     const cnt = Object.keys(stats).length;
     const green = Object.values(stats).filter(s => s.level === 3).length;
@@ -254,6 +262,36 @@ function histRow(r, isParent) {
       </div>
       ${isParent ? `<button class="btn-ghost btn-sm" data-delrec="${r.id}" style="color:var(--no)">删</button>` : ''}
     </li>`;
+}
+
+// 某一课的全部背诵记录（点进度格子弹出；手机无 hover，用点击看历史）
+function openLessonHistory(book, lessonNo, recs, isParent, onDeleted) {
+  const list = recs.filter(r => r.book === book && r.lesson_no === lessonNo)
+    .sort((a, b) => b.recite_date.localeCompare(a.recite_date));
+  const overlay = document.createElement('div');
+  overlay.className = 'checkin-overlay';
+  overlay.innerHTML = `
+    <div class="checkin-sheet">
+      <div class="checkin-head">
+        <span class="checkin-title">${book} L${lessonNo} · 背过 ${list.length} 次</span>
+        <button class="btn-ghost btn-sm" id="lhClose">关闭</button>
+      </div>
+      ${list.length
+        ? `<ul class="task-list">${list.map(r => histRow(r, isParent)).join('')}</ul>`
+        : `<div class="empty">这一课还没背过。</div>`}
+    </div>`;
+  document.body.style.overflow = 'hidden';
+  document.body.appendChild(overlay);
+  const close = () => { document.body.style.overflow = ''; overlay.remove(); };
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  overlay.querySelector('#lhClose').onclick = close;
+  overlay.querySelectorAll('[data-delrec]').forEach(b => {
+    b.onclick = async () => {
+      if (!confirm('删除这条背诵记录？熟练度会重新计算。')) return;
+      try { await db.deleteRecitation(b.dataset.delrec); toast('已删除'); close(); onDeleted && onDeleted(); }
+      catch (e) { toast('删除失败：' + e.message); }
+    };
+  });
 }
 
 // ============================================================
