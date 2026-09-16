@@ -38,6 +38,19 @@ export function actorName() {
   return state.role;
 }
 
+// ---------- 课本配置（存 families.books，设置页「课本管理」维护） ----------
+// 结构：{ name 课本名, lessons 最大课号, step 课号步长 }
+// step=1 逐课有课文；step=2 单双配对（课文在单课，练习在双课，词挂单课号），如新概念一
+export const DEFAULT_BOOKS = [
+  { name: '新概念一', lessons: 143, step: 2 },
+  { name: '新概念二', lessons: 96, step: 1 }
+];
+export function bookCfgs() {
+  const b = state.family && state.family.books;
+  return Array.isArray(b) && b.length ? b : DEFAULT_BOOKS;
+}
+export function bookNames() { return bookCfgs().map(b => b.name); }
+
 // 本地持久化登录态，localStorage
 const LS_KEY = 'summer-plan-session';
 export function saveSession(s) {

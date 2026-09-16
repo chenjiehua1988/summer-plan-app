@@ -3,26 +3,28 @@
 // 记录每次背诵（课次+课文质量+错词+录音），统计熟练度、生词本，
 // 生成复习建议（倒序扫读游标 + 间隔到期插队）。
 // ============================================================
-import { state, todayStr, toast, segHtml, bindSeg } from './supabase.js';
+import { state, todayStr, toast, segHtml, bindSeg, bookCfgs, bookNames } from './supabase.js';
 import * as db from './db.js';
 
-const BOOKS = ['新概念一', '新概念二'];
 const Q_LABEL = { perfect: '一遍过', hint: '有提示', fail: '没背下来' };
 const Q_CLS = { perfect: 'lv3', hint: 'lv2', fail: 'lv1', '': 'lv0' };
 // 熟练度：连续顺利1次=🔴生疏 2次=🟡一般 ≥3次=🟢熟练
 // 复习间隔：streak 0/1→1天 2→3天 3→7天 4→15天 ≥5→30天
 const INTERVAL = [1, 1, 3, 7, 15];
 
-// 新概念一课文在奇数课（偶数课是练习）；新概念二 1~96 全有课文
+// 课本配置来自 families.books（设置页管理）；step=2 时课文在奇数课（偶数课是练习）
+function bookCfg(book) {
+  return bookCfgs().find(b => b.name === book) || { lessons: 96, step: 1 };
+}
+// 生成该课本全部课号列表：step=1 → 1..lessons；step=2 → 1,3,5..lessons
 function lessonList(book) {
+  const { lessons, step } = bookCfg(book);
   const a = [];
-  if (book === '新概念一') { for (let i = 1; i <= 143; i += 2) a.push(i); return a; }
-  for (let i = 1; i <= 96; i++) a.push(i);
+  for (let i = 1; i <= lessons; i += step || 1) a.push(i);
   return a;
 }
-// 新概念一按“对”学习：单课(课文)+配对双课(练习)的词都挂在单课号下，
-// 登记只填单课号，复习步长按单课(-2)；新概念二逐课步长 1
-function pairStep(book) { return book === '新概念一' ? 2 : 1; }
+// 复习/默认课号的步长（单双配对的课本按单课 -2 走）
+function pairStep(book) { return bookCfg(book).step || 1; }
 // 下一节新课号（新概念一取下一个单课）
 function nextNewLesson(book, maxLearned) {
   if (pairStep(book) === 1) return maxLearned + 1;
@@ -158,7 +160,7 @@ export async function renderRecite(view) {
     const [recs, sts] = await Promise.all([db.fetchRecitations(childId), db.fetchReciteStates(childId)]);
     // 词表（生词本计算用）
     const listsByBook = {};
-    for (const b of BOOKS) {
+    for (const b of bookNames()) {
       try { listsByBook[b] = await db.fetchAllLessonWords(b); } catch (e) { listsByBook[b] = []; }
     }
 
@@ -380,7 +382,7 @@ export function openRecitePanel(childId, onSaved) {
   overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
   $('#rpClose').onclick = close;
 
-  const f = { book: BOOKS[0], kind: 'new', quality: 'perfect', lesson: 1, wrong: new Set(), words: null, blobs: [] };
+  const f = { book: bookNames()[0], kind: 'new', quality: 'perfect', lesson: 1, wrong: new Set(), words: null, blobs: [] };
   // 录音
   const mime = MediaRecorder.isTypeSupported('audio/webm') ? 'webm'
     : MediaRecorder.isTypeSupported('audio/mp4') ? 'mp4' : '';
@@ -429,7 +431,7 @@ export function openRecitePanel(childId, onSaved) {
       const st = sts.find(x => x.book === f.book);
       cursor = st ? st.cursor_lesson : null;
     } catch (e) { console.warn('recite init', e.message); }
-    $('#rpBook').innerHTML = segHtml(BOOKS, f.book, true);
+    $('#rpBook').innerHTML = segHtml(bookNames(), f.book, true);
     $('#rpKind').innerHTML = segHtml([{ value: 'new', label: '新课' }, { value: 'review', label: '复习' }], f.kind, true);
     $('#rpQuality').innerHTML = segHtml([
       { value: 'perfect', label: '一遍过' }, { value: 'hint', label: '有提示' },
@@ -560,7 +562,7 @@ export function openWordListPanel(childId, onSaved) {
   overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
   $('#wpClose').onclick = close;
 
-  const f = { book: BOOKS[0], lesson: 1 };
+  const f = { book: bookNames()[0], lesson: 1 };
   let existed = new Set();
 
   (async () => {
@@ -571,7 +573,7 @@ export function openWordListPanel(childId, onSaved) {
       // 默认课号 = 下一个新课（新概念一取下一个单课）
       if (existed.size) f.lesson = nextNewLesson(f.book, Math.max(...existed));
     } catch (e) { console.warn('wordlist init', e.message); }
-    $('#wpBook').innerHTML = segHtml(BOOKS, f.book, true);
+    $('#wpBook').innerHTML = segHtml(bookNames(), f.book, true);
     bindSeg($('#wpBook'), v => {
       f.book = v;
       existed = new Set(); // 换书后重新拉已学课
@@ -661,7 +663,7 @@ export function mountCheckinRecite(overlay, r) {
 
   // 默认收起：新课学习前几天打卡不用管这里，背了才点开
   // 类型按任务名猜：带「旧/复习」默认复习，否则新课
-  const f = { book: BOOKS[0], kind: /旧|复习/.test(r.title || '') ? 'review' : 'new', quality: 'perfect', lesson: 0, wrong: new Set(), words: null };
+  const f = { book: bookNames()[0], kind: /旧|复习/.test(r.title || '') ? 'review' : 'new', quality: 'perfect', lesson: 0, wrong: new Set(), words: null };
   let existed = new Set(), cursor = null, maxLearned = 0, ready = false, expanded = false;
   $('#crToggle').onclick = () => {
     expanded = !expanded;

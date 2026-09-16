@@ -1,7 +1,7 @@
 // ============================================================
 // app.js：路由 / 导航 / 初始化
 // ============================================================
-import { supabase, state, toast, todayStr, segHtml, bindSeg, mdhm } from './supabase.js';
+import { supabase, state, toast, todayStr, segHtml, bindSeg, mdhm, bookCfgs } from './supabase.js';
 import * as auth from './auth.js';
 import * as db from './db.js';
 import { renderToday, renderTemplates } from './tasks.js';
@@ -361,6 +361,19 @@ function renderSetup(view) {
       <button class="btn-primary btn-sm" id="btnSaveRule" style="margin-top:8px">保存规则</button>
     </div>
 
+    <div class="section-title">课本管理（背诵）</div>
+    <div class="card" id="booksCard"></div>
+    <div class="child-add">
+      <input id="bkName" type="text" placeholder="课本名（如 新概念三）" class="grow" />
+      <input id="bkLessons" type="number" placeholder="课数" style="width:64px" />
+      <select id="bkStep" style="width:104px">
+        <option value="1">逐课</option>
+        <option value="2">单双配对</option>
+      </select>
+      <button class="btn-primary btn-sm" id="bkAdd">添加</button>
+    </div>
+    <div class="row-hint">步长=单双配对 表示课文在单数课、双课是练习（如新概念一），登记只填单课号。行内改完点「保存课本」。删除课本不影响已有背诵记录，但该课本不再显示。</div>
+
     <div class="section-title">通知设置</div>
     <div class="card">
       <div class="row-line"><span>打卡通知</span><button class="btn-ghost btn-sm" id="btnPushToggle">开启</button></div>
@@ -452,10 +465,27 @@ function renderSetup(view) {
       toast('规则已保存');
     } catch (e) { toast('保存失败：' + e.message); }
   };
+  // 添加课本
+  const bkAdd = view.querySelector('#bkAdd');
+  if (bkAdd) bkAdd.onclick = async () => {
+    const name = view.querySelector('#bkName').value.trim();
+    const lessons = +view.querySelector('#bkLessons').value || 0;
+    const step = +view.querySelector('#bkStep').value || 1;
+    if (!name) { toast('请填课本名'); return; }
+    if (!lessons) { toast('请填课数'); return; }
+    if (bookCfgs().some(b => b.name === name)) { toast('已有同名课本'); return; }
+    try {
+      await saveBooksList([...bookCfgs().map(b => ({ ...b })), { name, lessons, step }]);
+      view.querySelector('#bkName').value = '';
+      view.querySelector('#bkLessons').value = '';
+      toast('课本已添加'); renderBooksCard();
+    } catch (e) { toast('添加失败：' + e.message); }
+  };
   renderPlansCard();
   renderPlanTypesCard();
   fillPlanTypeSelect();
   renderTagsCard();
+  renderBooksCard();
   renderShopCard();
   initShopIconPicker();
   renderChildrenCard();
@@ -661,6 +691,50 @@ function renderPlansCard() {
         if (error || !data) { toast('密码错误，删除取消'); return; }
         await db.deletePlan(b.dataset.delPlan); state.plans = state.plans.filter(x => x.id !== b.dataset.delPlan); if (state.currentPlanId === b.dataset.delPlan) { state.currentPlanId = null; auth.switchPlan(null); } fillPlanSwitcher(); renderPlansCard(); toast('已删除');
       } catch (e) { toast('删除失败：' + e.message); }
+    };
+  });
+}
+
+// ---------- 课本配置管理（存 families.books，背诵模块读取） ----------
+async function saveBooksList(list) {
+  const { error } = await supabase.from('families').update({ books: list }).eq('id', state.family.id);
+  if (error) throw error;
+  state.family.books = list;
+}
+function renderBooksCard() {
+  const card = document.getElementById('booksCard');
+  if (!card) return;
+  card.innerHTML = bookCfgs().map((b, i) => `
+    <div class="mgmt-row">
+      <input type="text" value="${b.name}" data-bk-name="${i}" style="flex:1;min-width:0" />
+      <input type="number" value="${b.lessons}" data-bk-lessons="${i}" title="最大课号" style="width:64px" />
+      <select data-bk-step="${i}" style="width:104px">
+        <option value="1"${+b.step === 1 ? ' selected' : ''}>逐课</option>
+        <option value="2"${+b.step === 2 ? ' selected' : ''}>单双配对</option>
+      </select>
+      <button class="btn-ghost btn-sm" data-bk-del="${i}">删</button>
+    </div>`).join('') + `<button class="btn-primary btn-sm" id="bkSave" style="margin-top:8px">保存课本</button>`;
+  card.querySelector('#bkSave').onclick = async () => {
+    const list = [...card.querySelectorAll('[data-bk-name]')].map(inp => {
+      const i = inp.dataset.bkName;
+      return {
+        name: inp.value.trim(),
+        lessons: Math.max(1, +card.querySelector(`[data-bk-lessons="${i}"]`).value || 1),
+        step: +card.querySelector(`[data-bk-step="${i}"]`).value || 1
+      };
+    }).filter(b => b.name);
+    if (!list.length) { toast('至少保留一本课本'); return; }
+    try { await saveBooksList(list); toast('课本配置已保存'); renderBooksCard(); }
+    catch (e) { toast('保存失败：' + e.message); }
+  };
+  card.querySelectorAll('[data-bk-del]').forEach(btn => {
+    btn.onclick = async () => {
+      const i = +btn.dataset.bkDel;
+      const cfgs = bookCfgs();
+      if (cfgs.length <= 1) { toast('至少保留一本课本'); return; }
+      if (!confirm(`删除课本「${cfgs[i].name}」？已有背诵记录不会删，但该课本不再显示。`)) return;
+      try { await saveBooksList(cfgs.filter((_, j) => j !== i).map(b => ({ ...b }))); toast('已删除'); renderBooksCard(); }
+      catch (e) { toast('删除失败：' + e.message); }
     };
   });
 }
