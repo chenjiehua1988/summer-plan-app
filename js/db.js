@@ -86,10 +86,10 @@ export async function addChild(name, gradeTarget) {
   state.children.push(data);
   return data;
 }
-export async function removeChild(id) {
-  const { error } = await supabase.from('children').delete().eq('id', id);
+// 孩子档案不提供删除（防误删整段记录）；改名/年级备注用
+export async function updateChild(id, fields) {
+  const { error } = await supabase.from('children').update(fields).eq('id', id);
   if (error) throw error;
-  state.children = state.children.filter(c => c.id !== id);
 }
 
 // ---------- 任务模板（绑「周期+孩子」） ----------

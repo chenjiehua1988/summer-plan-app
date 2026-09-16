@@ -426,6 +426,7 @@ function renderSetup(view) {
       <input id="cName" type="text" placeholder="孩子姓名" class="grow" />
       <button class="btn-primary btn-sm" id="cAdd">添加</button>
     </div>
+    <div class="row-hint">孩子档案不支持删除（防止误删整段记录），只可改名/年级备注；改名不影响孩子登录（登录按孩子选择，不按名字匹配）。</div>
     <div class="seg-block" id="cGradeSeg"></div>
     <input type="hidden" id="cGrade" value="准六年级" />
 
@@ -817,20 +818,22 @@ function renderChildrenCard() {
     ? state.children.map(c => `
       <div class="row-line">
         <span>${c.name}（${c.grade_target || ''}）</span>
-        <button class="btn-ghost btn-sm" data-del-child="${c.id}">删除</button>
+        <button class="btn-ghost btn-sm" data-ren-child="${c.id}">改名</button>
       </div>`).join('')
     : `<div class="empty">还没有孩子档案。</div>`;
-  card.querySelectorAll('[data-del-child]').forEach(b => {
+  // 孩子档案不提供删除（防误删整段记录），只支持改名/年级备注
+  card.querySelectorAll('[data-ren-child]').forEach(b => {
     b.onclick = async () => {
-      if (!confirm('删除该孩子及其所有任务记录？此操作不可恢复！')) return;
-      // 验证家庭密码
-      const pwd = prompt('请输入家庭密码确认删除：');
-      if (pwd === null) return;
+      const c = state.children.find(x => x.id === b.dataset.renChild);
+      if (!c) return;
+      const name = (prompt('孩子名字：', c.name) || '').trim();
+      if (!name) return;
+      const grade = (prompt('年级备注（如 新三年级，可留空）：', c.grade_target || '') || '').trim();
       try {
-        const { data, error } = await supabase.rpc('pw_match', { p_name: state.family.name, p_pw: pwd });
-        if (error || !data) { toast('密码错误，删除取消'); return; }
-        await db.removeChild(b.dataset.delChild); toast('已删除'); fillChildSwitcher(); renderChildrenCard();
-      } catch (e) { toast('删除失败：' + e.message); }
+        await db.updateChild(c.id, { name, grade_target: grade });
+        c.name = name; c.grade_target = grade;
+        toast('已保存'); fillChildSwitcher(); renderChildrenCard();
+      } catch (e) { toast('保存失败：' + e.message); }
     };
   });
 }
