@@ -77,7 +77,7 @@ function calcLessonStats(recs, book) {
   return out;
 }
 
-// ---------- 生词本：最近一次结果是错的就留在本里 ----------
+// ---------- 生词本：最近一次结果是错的留在「未掌握」；之后答对过一次算「已掌握」（保留展示/导出） ----------
 function calcWordBook(recs, book, lists) {
   const lmap = {};
   (lists || []).forEach(l => { lmap[l.lesson_no] = l.words || []; });
@@ -87,19 +87,45 @@ function calcWordBook(recs, book, lists) {
     for (const w of (r.wrong_words || [])) {
       const key = String(w).trim();
       if (!key) continue;
-      const e = words[key] = words[key] || { word: key, miss: 0, lastMissed: '', lesson: r.lesson_no };
+      const e = words[key] = words[key] || { word: key, miss: 0, firstMissed: '', lastMissed: '', lessons: new Set(), lesson: r.lesson_no };
       e.miss++;
+      e.lessons.add(r.lesson_no);
+      if (!e.firstMissed || r.recite_date < e.firstMissed) e.firstMissed = r.recite_date;
       if (r.recite_date > e.lastMissed) { e.lastMissed = r.recite_date; e.lesson = r.lesson_no; }
     }
   }
-  // 出本：lastMissed 之后同课有一次带词表的背诵且没再错
+  // 出本（转已掌握）：lastMissed 之后同课有一次带词表的背诵且没再错
+  const active = [], mastered = [];
   for (const key of Object.keys(words)) {
     const e = words[key];
     const after = recs.filter(r => r.book === book && r.lesson_no === e.lesson
       && r.recite_date > e.lastMissed && (r.words_total || 0) > 0);
-    if (after.some(r => !(r.wrong_words || []).includes(key))) delete words[key];
+    (after.some(r => !(r.wrong_words || []).includes(key)) ? mastered : active).push(e);
   }
-  return Object.values(words).sort((a, b) => b.miss - a.miss || b.lastMissed.localeCompare(a.lastMissed));
+  const byMiss = (a, b) => b.miss - a.miss || b.lastMissed.localeCompare(a.lastMissed);
+  return { active: active.sort(byMiss), mastered: mastered.sort(byMiss) };
+}
+
+// ---------- 家长导出错词 CSV（聚合：单词/次数/状态/涉及课/首错/最近错） ----------
+function exportWrongWords(childId, recs, listsByBook) {
+  const name = (state.children.find(x => x.id === childId) || {}).name || '孩子';
+  const rows = [['书', '单词', '错误次数', '状态', '错过的课', '首错日期', '最近错日期']];
+  for (const b of [...new Set(recs.map(r => r.book))]) {
+    const wb = calcWordBook(recs, b, listsByBook[b]);
+    const push = (e, ok) => rows.push([b, e.word, e.miss, ok ? '已掌握' : '未掌握',
+      [...e.lessons].sort((a, c) => a - c).map(l => 'L' + l).join(' '), e.firstMissed, e.lastMissed]);
+    wb.active.forEach(e => push(e, false));
+    wb.mastered.forEach(e => push(e, true));
+  }
+  if (rows.length === 1) { toast('还没有错词记录'); return; }
+  const csv = '﻿' + rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  a.download = `错词-${name}-${todayStr()}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  toast(`已导出 ${rows.length - 1} 条错词 → 下载目录`);
 }
 
 // ---------- 倒序游标推进（保存一条记录后调用） ----------
@@ -143,6 +169,7 @@ export async function renderRecite(view) {
           <div class="progress-label">课文背诵 · 单词 · 复习提醒</div>
         </div>
         ${isParent ? `<div style="display:flex;gap:8px">
+          <button class="btn-ghost btn-sm" id="rcExport">⬇ 导出错词</button>
           <button class="btn-ghost btn-sm" id="rcWords">📋 词表</button>
           <button class="btn-primary btn-sm" id="rcAdd">＋ 补录</button></div>` : ''}
       </div>
@@ -190,6 +217,8 @@ export async function renderRecite(view) {
     if (addBtn) addBtn.onclick = () => openRecitePanel(childId, () => renderRecite(view));
     const wlBtn = view.querySelector('#rcWords');
     if (wlBtn) wlBtn.onclick = () => openWordListPanel(childId, () => renderRecite(view));
+    const exBtn = view.querySelector('#rcExport');
+    if (exBtn) exBtn.onclick = () => exportWrongWords(childId, recs, listsByBook);
   } catch (e) {
     console.warn(e);
     view.innerHTML = `<div class="empty">加载失败：${e.message}</div>`;
@@ -233,12 +262,23 @@ function progressHtml(recs, listsByBook) {
     }).join('');
     const cnt = Object.keys(stats).length;
     const green = Object.values(stats).filter(s => s.level === 3).length;
+    const chip = (w, ok) => `<span class="word-chip bad"${ok ? ' style="opacity:.5"' : ''}>${w.word}×${w.miss}${ok ? ' ✓' : ''}</span>`;
+    let wbLine = '';
+    if (wb.active.length || wb.mastered.length) {
+      const act = wb.active.length
+        ? wb.active.slice(0, 8).map(w => chip(w)).join('') + (wb.active.length > 8 ? ' …' : '')
+        : '无 🎉';
+      const mas = wb.mastered.length
+        ? `<div style="margin-top:4px;color:var(--muted)">✓ 已掌握（${wb.mastered.length}）：`
+          + wb.mastered.slice(0, 8).map(w => chip(w, true)).join('') + (wb.mastered.length > 8 ? ' …' : '') + '</div>'
+        : '';
+      wbLine = `<div class="rc-words">📌 未掌握（${wb.active.length}）：${act}${mas}</div>`;
+    }
     return `
       <div class="card rc-prog">
         <div class="rc-sug-head">${b} <small>已学 ${cnt}/${all.length} 课 · 🟢熟练 ${green} 课</small></div>
         <div class="recite-grid">${cells}</div>
-        ${wb.length ? `<div class="rc-words">📌 生词本（${wb.length}）：${wb.slice(0, 8).map(w =>
-          `<span class="word-chip bad">${w.word}×${w.miss}</span>`).join('')}${wb.length > 8 ? ' …' : ''}</div>` : ''}
+        ${wbLine}
       </div>`;
   }).join('');
 }
